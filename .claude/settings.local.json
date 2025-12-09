@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose build)",
+      "Bash(cd /mnt/c/Users/Anas CHAAIRI/Desktop/ReataurentOrder/frontend)",
+      "Bash(cat:*)",
+      "Bash(cd:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose restart:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

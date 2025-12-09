@@ -1,0 +1,61 @@
+# Core Django
+Django==5.0.1
+djangorestframework==3.14.0
+djangorestframework-simplejwt==5.3.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# CORS
+django-cors-headers==4.3.1
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Celery
+celery==5.3.6
+redis==5.0.1
+django-celery-beat==2.6.0
+
+# Django Channels for WebSockets
+channels==4.0.0
+channels-redis==4.1.0
+daphne==4.0.0
+
+# Odoo Integration
+# xmlrpc.client is built-in to Python 3
+
+# Image handling
+Pillow==10.2.0
+qrcode==7.4.2
+
+# Validation
+django-phonenumber-field==7.3.0
+phonenumbers==8.13.27
+
+# Password validation
+argon2-cffi==23.1.0
+
+# Logging and Monitoring
+sentry-sdk==1.40.0
+
+# Testing
+pytest==8.0.0
+pytest-django==4.7.0
+pytest-cov==4.1.0
+factory-boy==3.3.0
+
+# Code quality
+flake8==7.0.0
+black==24.1.1
+
+# API Documentation
+drf-spectacular==0.27.1
+django-filter==23.5
+
+# Web Server
+gunicorn==21.2.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2024.1
