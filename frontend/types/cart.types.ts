@@ -33,6 +33,8 @@ export interface CartContextType {
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
+  resetCart: () => void;
   isCartOpen: boolean;
   toggleCart: () => void;
+  setIsCartOpen: (open: boolean) => void;
 }

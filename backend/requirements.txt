@@ -36,6 +36,9 @@ phonenumbers==8.13.27
 # Password validation
 argon2-cffi==23.1.0
 
+# Field Encryption
+django-encrypted-model-fields==0.6.5
+
 # Logging and Monitoring
 sentry-sdk==1.40.0
 

@@ -35,8 +35,9 @@ export interface WaiterAssignment {
 
 class TableService {
   async getTables(): Promise<Table[]> {
-    const response = await api.get<Table[]>('/api/tables/tables/');
-    return response.data;
+    const response = await api.get('/api/tables/tables/');
+    const data = response.data;
+    return Array.isArray(data) ? data : data.results ?? [];
   }
 
   async getTable(id: number): Promise<Table> {
@@ -62,10 +63,11 @@ class TableService {
   }
 
   async getAvailableTables(): Promise<Table[]> {
-    const response = await api.get<Table[]>('/api/tables/tables/', {
+    const response = await api.get('/api/tables/tables/', {
       params: { status: 'AVAILABLE' }
     });
-    return response.data;
+    const data = response.data;
+    return Array.isArray(data) ? data : data.results ?? [];
   }
 
   async getTableAssignments(): Promise<WaiterAssignment[]> {
@@ -85,6 +87,20 @@ class TableService {
 
   async endShift(assignmentId: number): Promise<void> {
     await api.post(`/api/tables/assignments/${assignmentId}/end_shift/`);
+  }
+
+  async updateTable(id: number, data: Partial<Table>): Promise<Table> {
+    const response = await api.patch<Table>(`/api/tables/tables/${id}/`, data);
+    return response.data;
+  }
+
+  async deleteTable(id: number): Promise<void> {
+    await api.delete(`/api/tables/tables/${id}/`);
+  }
+
+  async syncTablesFromOdoo(): Promise<{ synced: number; message: string }> {
+    const response = await api.post<{ synced: number; message: string }>('/api/tables/tables/sync_from_odoo/');
+    return response.data;
   }
 }
 

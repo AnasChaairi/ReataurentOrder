@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
@@ -8,7 +8,7 @@ import { Footer } from "@/components/layout/Footer";
 import { useOrder } from "@/contexts/OrderContext";
 import { orderService } from "@/services/order.service";
 
-export default function OrderConfirmationPage() {
+function OrderConfirmationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentOrder, setCurrentOrder } = useOrder();
@@ -155,7 +155,7 @@ export default function OrderConfirmationPage() {
                 </div>
 
                 {/* Order Total */}
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center pb-6 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-baristas-cream rounded-full flex items-center justify-center">
                       <svg className="w-6 h-6 text-baristas-brown" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,6 +166,35 @@ export default function OrderConfirmationPage() {
                       <p className="text-sm text-gray-600">Order Total:</p>
                       <p className="text-2xl font-bold text-baristas-brown-dark">
                         {currentOrder.total_amount} DH
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Odoo Sync Status */}
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      currentOrder.synced_to_odoo ? 'bg-green-100' : 'bg-yellow-100'
+                    }`}>
+                      {currentOrder.synced_to_odoo ? (
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">System Sync:</p>
+                      <p className={`font-semibold ${
+                        currentOrder.synced_to_odoo ? 'text-green-600' : 'text-yellow-600'
+                      }`}>
+                        {currentOrder.synced_to_odoo
+                          ? `Synced (ID: ${currentOrder.odoo_order_id})`
+                          : 'Pending sync'}
                       </p>
                     </div>
                   </div>
@@ -202,5 +231,22 @@ export default function OrderConfirmationPage() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function OrderConfirmationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-white flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-baristas-brown border-t-transparent mb-4"></div>
+            <p className="text-baristas-brown-dark">Loading order details...</p>
+          </div>
+        </div>
+      }
+    >
+      <OrderConfirmationContent />
+    </Suspense>
   );
 }

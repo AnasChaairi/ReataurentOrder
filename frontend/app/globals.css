@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
   --background: #ffffff;
@@ -41,5 +41,44 @@ body {
 
   .section-light {
     @apply bg-baristas-cream text-baristas-brown-dark;
+  }
+
+  /* Tablet mode styles */
+  .tablet-mode {
+    --touch-target-min: 48px;
+  }
+
+  .tablet-btn {
+    @apply min-h-[56px] px-6 py-4 text-lg font-semibold rounded-xl;
+  }
+
+  .tablet-menu-grid {
+    @apply grid grid-cols-2 gap-4;
+  }
+
+  .tablet-floating-cart {
+    @apply fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40;
+  }
+
+  .tablet-category-tabs {
+    @apply flex overflow-x-auto gap-2 pb-2;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .tablet-category-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tablet-category-tab {
+    @apply whitespace-nowrap px-6 py-3 rounded-full font-semibold text-base transition-colors flex-shrink-0;
+  }
+
+  .tablet-category-tab-active {
+    @apply bg-baristas-brown text-white;
+  }
+
+  .tablet-category-tab-inactive {
+    @apply bg-white text-baristas-brown-dark border-2 border-baristas-brown/20;
   }
 }

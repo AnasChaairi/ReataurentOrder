@@ -18,13 +18,25 @@ app.autodiscover_tasks()
 
 # Configure periodic tasks
 app.conf.beat_schedule = {
+    # Odoo Integration - Menu Sync
     'sync-menu-from-odoo-nightly': {
         'task': 'odoo_integration.tasks.sync_menu_from_odoo',
-        'schedule': crontab(hour=2, minute=0),  # Run at 2 AM daily
+        'schedule': crontab(hour=2, minute=0),  # 2 AM daily
     },
+    # Odoo Integration - Table Sync
+    'sync-tables-from-odoo-nightly': {
+        'task': 'odoo_integration.tasks.sync_tables_from_odoo',
+        'schedule': crontab(hour=2, minute=30),  # 2:30 AM daily
+    },
+    # Odoo Integration - Retry Failed Syncs
+    'retry-failed-odoo-syncs': {
+        'task': 'odoo_integration.tasks.retry_failed_syncs',
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
+    },
+    # Notifications Cleanup
     'cleanup-old-notifications': {
         'task': 'notifications.tasks.cleanup_old_notifications',
-        'schedule': crontab(hour=3, minute=0),  # Run at 3 AM daily
+        'schedule': crontab(hour=3, minute=0),  # 3 AM daily
     },
 }
 

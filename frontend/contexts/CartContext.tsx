@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { CartContextType, Cart, CartItem } from '@/types/cart.types';
 import { cartService } from '@/services/cart.service';
 
@@ -27,7 +27,7 @@ export function CartProvider({ children }: CartProviderProps) {
     }
   }, [cart]);
 
-  const addToCart = (item: Omit<CartItem, 'id' | 'unit_price' | 'total_price'>) => {
+  const addToCart = useCallback((item: Omit<CartItem, 'id' | 'unit_price' | 'total_price'>) => {
     const unitPrice = cartService.calculateUnitPrice(item);
     const totalPrice = unitPrice * item.quantity;
     const id = cartService.generateCartItemId(item);
@@ -59,16 +59,16 @@ export function CartProvider({ children }: CartProviderProps) {
 
       return cartService.calculateCart(newItems);
     });
-  };
+  }, []);
 
-  const removeFromCart = (itemId: string) => {
+  const removeFromCart = useCallback((itemId: string) => {
     setCart((prevCart) => {
       const newItems = prevCart.items.filter((item) => item.id !== itemId);
       return cartService.calculateCart(newItems);
     });
-  };
+  }, []);
 
-  const updateQuantity = (itemId: string, quantity: number) => {
+  const updateQuantity = useCallback((itemId: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(itemId);
       return;
@@ -88,25 +88,51 @@ export function CartProvider({ children }: CartProviderProps) {
 
       return cartService.calculateCart(newItems);
     });
-  };
+  }, [removeFromCart]);
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCart(cartService.clearCart());
-  };
+  }, []);
 
-  const toggleCart = () => {
+  const resetCart = useCallback(() => {
+    setCart({
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      item_count: 0,
+    });
+    setIsCartOpen(false);
+  }, []);
+
+  const toggleCart = useCallback(() => {
     setIsCartOpen((prev) => !prev);
-  };
+  }, []);
 
-  const value: CartContextType = {
-    cart,
-    addToCart,
-    removeFromCart,
-    updateQuantity,
-    clearCart,
-    isCartOpen,
-    toggleCart,
-  };
+  const value: CartContextType = useMemo(
+    () => ({
+      cart,
+      addToCart,
+      removeFromCart,
+      updateQuantity,
+      clearCart,
+      resetCart,
+      isCartOpen,
+      toggleCart,
+      setIsCartOpen,
+    }),
+    [cart, addToCart, removeFromCart, updateQuantity, clearCart, resetCart, isCartOpen, toggleCart]
+  );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+}
+
+// Custom hook to use the CartContext
+export function useCart() {
+  const context = React.useContext(CartContext);
+  if (context === undefined) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
+  return context;
 }

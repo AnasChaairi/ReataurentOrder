@@ -87,12 +87,14 @@ class OrderSerializer(serializers.ModelSerializer):
             'customer_notes', 'waiter_notes', 'kitchen_notes',
             'created_at', 'updated_at', 'confirmed_at', 'preparing_at',
             'ready_at', 'served_at', 'cancelled_at',
-            'can_cancel', 'can_modify', 'synced_to_odoo'
+            'can_cancel', 'can_modify', 'synced_to_odoo',
+            'odoo_order_id', 'odoo_sync_error'
         ]
         read_only_fields = [
             'order_number', 'subtotal', 'tax', 'total_amount',
             'created_at', 'updated_at', 'confirmed_at', 'preparing_at',
-            'ready_at', 'served_at', 'cancelled_at', 'synced_to_odoo'
+            'ready_at', 'served_at', 'cancelled_at', 'synced_to_odoo',
+            'odoo_order_id', 'odoo_sync_error'
         ]
 
     def get_customer_name(self, obj):
@@ -140,27 +142,28 @@ class OrderCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         """Create order with items"""
         from django.db import transaction
-        
+
         items_data = validated_data.pop('items')
-        customer = self.context['request'].user
+        user = self.context['request'].user
+        customer = user if user.is_authenticated and getattr(user, 'role', None) == 'CUSTOMER' else None
         table = validated_data['table']
-        
+
         # Get active session for table
         session = table.get_current_session()
-        
+
         # Get assigned waiter
         waiter = table.get_assigned_waiter()
-        
+
         with transaction.atomic():
             # Create order
             order = Order.objects.create(
                 table=table,
                 session=session,
-                customer=customer if customer.role == 'CUSTOMER' else None,
+                customer=customer,
                 waiter=waiter,
                 customer_notes=validated_data.get('customer_notes', ''),
             )
-            
+
             # Create order items
             for item_data in items_data:
                 menu_item = item_data['menu_item']
@@ -168,10 +171,10 @@ class OrderCreateSerializer(serializers.Serializer):
                 addons = item_data.get('addons', [])
                 quantity = item_data.get('quantity', 1)
                 instructions = item_data.get('special_instructions', '')
-                
+
                 # Calculate addons price
                 addons_price = sum(addon.price for addon in addons)
-                
+
                 # Create order item
                 order_item = OrderItem.objects.create(
                     order=order,
@@ -181,17 +184,17 @@ class OrderCreateSerializer(serializers.Serializer):
                     quantity=quantity,
                     special_instructions=instructions
                 )
-                
+
                 # Create addon entries
                 for addon in addons:
                     OrderItemAddon.objects.create(
                         order_item=order_item,
                         addon=addon
                     )
-            
+
             # Calculate totals
             order.calculate_totals()
-            
+
             # Create event
             OrderEvent.objects.create(
                 order=order,
@@ -199,7 +202,7 @@ class OrderCreateSerializer(serializers.Serializer):
                 actor=customer,
                 description=f'Order created with {len(items_data)} items'
             )
-            
+
         return order
 
 
@@ -250,6 +253,28 @@ class OrderModifySerializer(serializers.Serializer):
             )
         
         return data
+
+
+class OrderPublicItemSerializer(serializers.ModelSerializer):
+    """Limited serializer for public order item view"""
+
+    class Meta:
+        model = OrderItem
+        fields = ['item_name', 'quantity']
+
+
+class OrderPublicSerializer(serializers.ModelSerializer):
+    """Limited serializer for public order lookup - no sensitive data"""
+    items = OrderPublicItemSerializer(many=True, read_only=True)
+    table_number = serializers.CharField(source='table.number', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            'order_number', 'status', 'status_display', 'table_number',
+            'items', 'total_amount', 'created_at'
+        ]
 
 
 class OrderEventSerializer(serializers.ModelSerializer):

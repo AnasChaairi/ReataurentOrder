@@ -18,13 +18,90 @@ from .serializers import (
     AdminUserUpdateSerializer,
 )
 from .permissions import IsAdmin, IsOwnerOrAdmin
+from .throttles import LoginRateThrottle, RegistrationRateThrottle
 
 User = get_user_model()
+
+
+def _set_auth_cookies(response, access_token, refresh_token):
+    """Set JWT tokens as httpOnly cookies."""
+    from django.conf import settings as django_settings
+    secure = not django_settings.DEBUG
+    response.set_cookie(
+        'access_token',
+        str(access_token),
+        httponly=True,
+        secure=secure,
+        samesite='Lax',
+        max_age=int(django_settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
+        path='/',
+    )
+    response.set_cookie(
+        'refresh_token',
+        str(refresh_token),
+        httponly=True,
+        secure=secure,
+        samesite='Lax',
+        max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+        path='/api/auth/',
+    )
+    return response
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom JWT token view with additional user data."""
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            response = _set_auth_cookies(
+                response,
+                response.data['access'],
+                response.data['refresh'],
+            )
+        return response
+
+
+class CookieTokenRefreshView(generics.GenericAPIView):
+    """Refresh JWT token using httpOnly cookie."""
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get('refresh_token') or request.data.get('refresh')
+        if not refresh_token:
+            return Response(
+                {'error': 'No refresh token provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken as RT
+            token = RT(refresh_token)
+            access = str(token.access_token)
+            new_refresh = str(token)
+
+            response = Response({
+                'access': access,
+                'refresh': new_refresh,
+            })
+            response = _set_auth_cookies(response, access, new_refresh)
+            return response
+        except Exception:
+            return Response(
+                {'error': 'Invalid or expired refresh token.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+
+class AuthStatusView(generics.GenericAPIView):
+    """Check authentication status via cookie."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            'user': UserSerializer(request.user).data,
+        })
 
 
 class UserRegistrationView(generics.CreateAPIView):
@@ -35,21 +112,23 @@ class UserRegistrationView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
+    throttle_classes = [RegistrationRateThrottle]
 
     def create(self, request, *args, **kwargs):
-        """Create user and return tokens."""
+        """Create user and return tokens as cookies."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Generate tokens for the new user
         refresh = RefreshToken.for_user(user)
 
-        return Response({
+        response = Response({
             'user': UserSerializer(user).data,
-            'refresh': str(refresh),
             'access': str(refresh.access_token),
+            'refresh': str(refresh),
         }, status=status.HTTP_201_CREATED)
+        response = _set_auth_cookies(response, refresh.access_token, refresh)
+        return response
 
 
 class UserProfileView(generics.RetrieveAPIView):
@@ -87,31 +166,35 @@ class ChangePasswordView(generics.GenericAPIView):
 
 class LogoutView(generics.GenericAPIView):
     """
-    Logout view that blacklists the refresh token.
+    Logout view that blacklists the refresh token and clears cookies.
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
-            refresh_token = request.data.get('refresh')
-            if not refresh_token:
-                return Response(
-                    {'error': 'Refresh token is required.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            refresh_token = (
+                request.COOKIES.get('refresh_token')
+                or request.data.get('refresh')
+            )
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
 
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-
-            return Response(
+            response = Response(
                 {'message': 'Logout successful.'},
-                status=status.HTTP_200_OK
+                status=status.HTTP_200_OK,
             )
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+            response.delete_cookie('access_token', path='/')
+            response.delete_cookie('refresh_token', path='/api/auth/')
+            return response
+        except Exception:
+            response = Response(
+                {'message': 'Logout successful.'},
+                status=status.HTTP_200_OK,
             )
+            response.delete_cookie('access_token', path='/')
+            response.delete_cookie('refresh_token', path='/api/auth/')
+            return response
 
 
 class AdminUserViewSet(viewsets.ModelViewSet):

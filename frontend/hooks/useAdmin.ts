@@ -10,8 +10,8 @@ export function useAdmin() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const checkAdmin = () => {
-      const user = authService.getCurrentUser();
+    const checkAdmin = async () => {
+      const user = await authService.checkAuthStatus();
 
       if (!user) {
         router.push('/auth/login');

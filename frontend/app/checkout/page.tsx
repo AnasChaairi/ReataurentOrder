@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
@@ -22,10 +22,15 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect if cart is empty
+  // Flag to prevent redirect when order is placed (cart becomes empty)
+  const orderPlacedRef = useRef(false);
+
+  // Redirect if cart is empty (but not if order was just placed)
   useEffect(() => {
     if (!cart || cart.items.length === 0) {
-      router.push("/menu");
+      if (!orderPlacedRef.current) {
+        router.push("/menu");
+      }
     }
   }, [cart, router]);
 
@@ -55,6 +60,9 @@ export default function CheckoutPage() {
       // Set current order for tracking
       setCurrentOrder(order);
 
+      // Set flag before clearing cart to prevent redirect to menu
+      orderPlacedRef.current = true;
+
       // Clear cart after successful order
       clearCart();
 
@@ -62,7 +70,30 @@ export default function CheckoutPage() {
       router.push(`/orders/confirmation?order=${order.order_number}`);
     } catch (err: any) {
       console.error("Error placing order:", err);
-      setError(err.response?.data?.message || "Failed to place order. Please try again.");
+      const data = err.response?.data;
+      let errorMessage = "Failed to place order. Please try again.";
+      if (data) {
+        if (typeof data === "string") {
+          errorMessage = data;
+        } else if (data.detail) {
+          errorMessage = data.detail;
+        } else if (data.non_field_errors) {
+          errorMessage = Array.isArray(data.non_field_errors)
+            ? data.non_field_errors.join(". ")
+            : data.non_field_errors;
+        } else if (data.message) {
+          errorMessage = data.message;
+        } else {
+          // Handle nested validation errors (e.g. {items: ["..."], table: ["..."]})
+          const messages = Object.entries(data)
+            .map(([key, val]) =>
+              `${key}: ${Array.isArray(val) ? val.join(", ") : val}`
+            )
+            .join(". ");
+          if (messages) errorMessage = messages;
+        }
+      }
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -136,7 +167,7 @@ export default function CheckoutPage() {
                       <div key={index} className="flex gap-4 pb-4 border-b border-gray-200 last:border-0">
                         <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
                           <Image
-                            src={item.menuItem.image || "/hero-image.png"}
+                            src={item.menuItem.image || "/hero-image.webp"}
                             alt={item.menuItem.name}
                             fill
                             className="object-cover"
@@ -164,7 +195,7 @@ export default function CheckoutPage() {
                         </div>
                         <div className="text-right">
                           <p className="font-semibold text-baristas-brown-dark">
-                            {item.price} dh
+                            {item.total_price} dh
                           </p>
                           <p className="text-sm text-gray-600">
                             Qty: {item.quantity}

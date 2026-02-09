@@ -1,17 +1,24 @@
+import logging
+
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from accounts.permissions import IsAdmin, IsAdminOrWaiter, IsCustomer
+from accounts.throttles import OrderCreateRateThrottle
+from notifications.services import notify_order_created, notify_order_status_change, notify_order_cancelled
+
+logger = logging.getLogger(__name__)
 from .models import Order, OrderItem, OrderEvent
 from .serializers import (
     OrderSerializer, OrderListSerializer, OrderCreateSerializer,
     OrderStatusUpdateSerializer, OrderModifySerializer,
-    OrderEventSerializer, OrderItemSerializer
+    OrderEventSerializer, OrderItemSerializer, OrderPublicSerializer
 )
 from .filters import OrderFilter
 
@@ -27,13 +34,21 @@ class OrderViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'total_amount', 'status']
     ordering = ['-created_at']
 
+    def get_permissions(self):
+        if self.action in ['create']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         """Filter orders based on user role"""
+        user = self.request.user
+
+        if not user.is_authenticated:
+            return Order.objects.none()
+
         queryset = Order.objects.select_related(
             'table', 'customer', 'waiter', 'session'
         ).prefetch_related('items__addons')
-
-        user = self.request.user
 
         if user.role == 'CUSTOMER':
             # Customers see only their orders
@@ -52,9 +67,37 @@ class OrderViewSet(viewsets.ModelViewSet):
             return OrderCreateSerializer
         return OrderSerializer
 
-    def perform_create(self, serializer):
-        """Create order"""
-        serializer.save()
+    def get_throttles(self):
+        if self.action == 'create':
+            return [OrderCreateRateThrottle()]
+        return super().get_throttles()
+
+    def create(self, request, *args, **kwargs):
+        """Create order and sync to Odoo synchronously"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+
+        # Sync to Odoo synchronously
+        try:
+            from odoo_integration.django_services import OdooConnectionService, OdooOrderSyncService
+            config = OdooConnectionService.get_active_config()
+            if config and config.auto_sync_orders:
+                service = OdooOrderSyncService(config)
+                service.sync_order_to_odoo(order)
+                order.refresh_from_db()
+        except Exception as e:
+            logger.error(f"Odoo sync failed for order {order.order_number}: {e}")
+
+        # Send real-time notifications
+        try:
+            notify_order_created(order)
+        except Exception as e:
+            logger.error(f"Failed to send order created notification: {e}")
+
+        # Return full order data via OrderSerializer
+        response_serializer = OrderSerializer(order)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdminOrWaiter])
     def verify(self, request, pk=None):
@@ -73,6 +116,11 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         # Update status to confirmed
         order.update_status('CONFIRMED', user=request.user)
+
+        try:
+            notify_order_status_change(order, 'PENDING', 'CONFIRMED')
+        except Exception as e:
+            logger.error(f"Failed to send status notification: {e}")
 
         return Response({
             'message': 'Order verified and confirmed',
@@ -102,6 +150,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             description=f'Order rejected: {reason}'
         )
 
+        try:
+            notify_order_cancelled(order, reason)
+        except Exception as e:
+            logger.error(f"Failed to send cancel notification: {e}")
+
         return Response({
             'message': 'Order rejected',
             'reason': reason
@@ -119,6 +172,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         new_status = serializer.validated_data['status']
         notes = serializer.validated_data.get('notes', '')
+        old_status = order.status
 
         # Update status
         order.update_status(new_status, user=request.user)
@@ -129,6 +183,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             else:
                 order.kitchen_notes = notes
             order.save()
+
+        try:
+            notify_order_status_change(order, old_status, new_status)
+        except Exception as e:
+            logger.error(f"Failed to send status notification: {e}")
 
         return Response({
             'message': f'Order status updated to {new_status}',
@@ -279,6 +338,45 @@ class OrderViewSet(viewsets.ModelViewSet):
         }
 
         return Response(stats)
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny],
+            url_path='by-number/(?P<order_number>[^/.]+)')
+    def by_number(self, request, order_number=None):
+        """Get order by order number (accessible to guests) - returns limited data"""
+        order = get_object_or_404(Order, order_number=order_number)
+        return Response(OrderPublicSerializer(order).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminOrWaiter],
+            url_path='sync-to-odoo')
+    def sync_to_odoo(self, request, pk=None):
+        """Manually sync order to Odoo (Staff only)"""
+        order = self.get_object()
+
+        try:
+            from odoo_integration.django_services import OdooConnectionService, OdooOrderSyncService
+            config = OdooConnectionService.get_active_config()
+
+            if not config:
+                return Response({
+                    'error': 'No active Odoo configuration found'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            service = OdooOrderSyncService(config)
+            service.sync_order_to_odoo(order)
+            order.refresh_from_db()
+
+            return Response({
+                'message': f'Order {order.order_number} synced to Odoo successfully',
+                'order': OrderSerializer(order).data
+            })
+
+        except Exception as e:
+            logger.error(f"Manual Odoo sync failed for order {order.order_number}: {e}")
+            from django.conf import settings as django_settings
+            error_msg = str(e) if django_settings.DEBUG else 'Failed to sync order to Odoo. Please try again.'
+            return Response({
+                'error': error_msg
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 from .models import OrderItemAddon

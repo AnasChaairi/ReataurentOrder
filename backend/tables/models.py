@@ -72,6 +72,24 @@ class Table(models.Model):
         help_text="Special notes about this table (e.g., near window, accessible)"
     )
 
+    # Odoo Integration
+    odoo_floor_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Odoo restaurant floor ID"
+    )
+    odoo_table_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="Odoo restaurant table ID"
+    )
+    odoo_last_synced = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time this table was synced from Odoo"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

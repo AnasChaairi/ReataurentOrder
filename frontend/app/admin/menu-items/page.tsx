@@ -48,7 +48,7 @@ export default function MenuItemsManagement() {
       setFormData({
         name: item.name,
         description: item.description,
-        price: item.price,
+        price: item.price.toString(),
         category: item.category.toString(),
         is_available: item.is_available,
         is_vegetarian: item.is_vegetarian,

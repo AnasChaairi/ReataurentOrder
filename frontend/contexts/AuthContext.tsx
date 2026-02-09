@@ -21,22 +21,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Check if user is authenticated on mount
+  // Check auth status on mount via /api/auth/me/ (cookie-based)
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (authService.isAuthenticated()) {
-          const currentUser = authService.getCurrentUser();
-          setUser(currentUser);
-
-          // Optionally fetch fresh user data
-          try {
-            const freshUser = await authService.getProfile();
-            setUser(freshUser);
-          } catch (error) {
-            console.error('Error fetching user profile:', error);
-          }
-        }
+        const currentUser = await authService.checkAuthStatus();
+        setUser(currentUser);
       } catch (error) {
         console.error('Auth initialization error:', error);
       } finally {
@@ -81,10 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     try {
-      if (authService.isAuthenticated()) {
-        const freshUser = await authService.getProfile();
-        setUser(freshUser);
-      }
+      const freshUser = await authService.checkAuthStatus();
+      setUser(freshUser);
     } catch (error) {
       console.error('Error refreshing user:', error);
     }

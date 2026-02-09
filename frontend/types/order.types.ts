@@ -1,13 +1,9 @@
 // Order related type definitions
 
-export interface CreateOrderItemAddon {
-  addon: number; // addon ID
-}
-
 export interface CreateOrderItem {
   menu_item: number;
   variant?: number;
-  addons: CreateOrderItemAddon[];
+  addons: number[];
   quantity: number;
   special_instructions?: string;
 }
@@ -56,4 +52,10 @@ export interface Order {
   ready_at?: string;
   served_at?: string;
   cancelled_at?: string;
+  preparation_time?: number;
+  table_number?: number;
+  // Odoo integration fields
+  odoo_order_id?: number;
+  synced_to_odoo?: boolean;
+  odoo_sync_error?: string;
 }

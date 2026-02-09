@@ -28,10 +28,6 @@ export function MenuItemCard({ item, onItemClick, onAddToCart }: MenuItemCardPro
     if (onAddToCart) {
       onAddToCart(item.id, quantity);
     }
-    // If the item has variants or addons, open the detail modal instead
-    if (onItemClick && (item.has_variants || item.average_rating > 0)) {
-      onItemClick(item);
-    }
   };
 
   const handleCardClick = () => {

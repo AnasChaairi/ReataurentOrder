@@ -6,8 +6,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
+from django.core.exceptions import ImproperlyConfigured
 
 # Load environment variables
 load_dotenv()
@@ -15,11 +14,22 @@ load_dotenv()
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-this-in-production')
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+# SECURITY: Require SECRET_KEY and FIELD_ENCRYPTION_KEY in production
+SECRET_KEY = os.getenv('SECRET_KEY', '')
+FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', '')
+
+if not DEBUG:
+    if not SECRET_KEY:
+        raise ImproperlyConfigured('SECRET_KEY environment variable is required in production')
+    if not FIELD_ENCRYPTION_KEY:
+        raise ImproperlyConfigured('FIELD_ENCRYPTION_KEY environment variable is required in production')
+else:
+    # Allow insecure defaults only in development
+    SECRET_KEY = SECRET_KEY or 'django-insecure-dev-only-key-change-in-production'
+    FIELD_ENCRYPTION_KEY = FIELD_ENCRYPTION_KEY or 'fzGXpT8xCVdcb8ixGHhPRJQjNQaQdPjYqTf7VLx-0Ls='
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -63,6 +73,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'restaurant_order.middleware.RequestLoggingMiddleware',
 ]
 
 ROOT_URLCONF = 'restaurant_order.urls'
@@ -149,7 +160,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'accounts.authentication.CookieJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -162,6 +173,18 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'restaurant_order.exception_handler.custom_exception_handler',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '30/min',
+        'user': '120/min',
+        'login': '5/min',
+        'registration': '5/min',
+        'order_create': '10/min',
+    },
 }
 
 # JWT Settings
@@ -177,12 +200,23 @@ SIMPLE_JWT = {
 }
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = os.getenv(
-    'CORS_ALLOWED_ORIGINS',
-    'http://localhost:3000,http://localhost:8000'
-).split(',')
+_cors_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if _cors_env:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()]
+elif DEBUG:
+    CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://localhost:8000']
+else:
+    CORS_ALLOWED_ORIGINS = []
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Cache Configuration - Redis backend for cross-worker/container caching
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/1",
+    }
+}
 
 # Channels
 CHANNEL_LAYERS = {
@@ -272,7 +306,7 @@ if SENTRY_DSN and not DEBUG:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],
-        traces_sample_rate=1.0,
+        traces_sample_rate=0.2,
         send_default_pii=True,
         environment=os.getenv('ENVIRONMENT', 'production'),
     )

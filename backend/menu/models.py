@@ -14,6 +14,19 @@ class Category(models.Model):
     order = models.IntegerField(default=0, help_text="Display order (lower numbers first)")
     is_active = models.BooleanField(default=True)
 
+    # Odoo Integration
+    odoo_category_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="Odoo product category ID"
+    )
+    odoo_last_synced = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time this category was synced from Odoo"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -69,6 +82,11 @@ class MenuItem(models.Model):
 
     # Odoo integration
     odoo_product_id = models.IntegerField(blank=True, null=True, unique=True)
+    odoo_last_synced = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time this item was synced from Odoo"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

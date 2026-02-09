@@ -13,19 +13,19 @@ export default function Home() {
       name: "GAUFRE TROIX CHOCOLAT",
       description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
       price: "8$ dh",
-      image: "/hero-image.png", // Using placeholder - replace with actual product image
+      image: "/hero-image.webp", // Using placeholder - replace with actual product image
     },
     {
       name: "CRÊPE KUNAFA PISTACHE",
       description: "Creamy chocolate ou lait et chocolat blanc, Biscuit Oreo",
       price: "7$ dh",
-      image: "/hero-image.png", // Using placeholder
+      image: "/hero-image.webp", // Using placeholder
     },
     {
       name: "BROWNIE BARISTAS",
       description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
       price: "6$ dh",
-      image: "/hero-image.png", // Using placeholder
+      image: "/hero-image.webp", // Using placeholder
     },
   ];
 
@@ -55,7 +55,7 @@ export default function Home() {
       <section className="relative h-screen section-dark">
         <div className="absolute inset-0 z-0">
           <Image
-            src="/hero-image.png"
+            src="/hero-image.webp"
             alt="Restaurant ambiance"
             fill
             className="object-cover brightness-50"
@@ -78,7 +78,7 @@ export default function Home() {
             {/* Hero Product Image */}
             <div className="relative w-full max-w-2xl mx-auto mb-12 h-64 md:h-80">
               <Image
-                src="/hero-image.png"
+                src="/hero-image.webp"
                 alt="Featured products"
                 fill
                 className="object-contain rounded-3xl"
@@ -145,7 +145,7 @@ export default function Home() {
               {/* Right: Food Images */}
               <div className="relative h-80 md:h-auto min-h-[400px]">
                 <Image
-                  src="/hero-image.png"
+                  src="/hero-image.webp"
                   alt="Delicious food"
                   fill
                   className="object-cover"
@@ -167,7 +167,7 @@ export default function Home() {
             {/* Left: Location Image */}
             <div className="relative h-96 md:h-[500px] rounded-3xl overflow-hidden shadow-xl">
               <Image
-                src="/hero-image.png"
+                src="/hero-image.webp"
                 alt="Baristas location"
                 fill
                 className="object-cover"
@@ -201,7 +201,7 @@ export default function Home() {
           <div className="flex justify-center gap-6 mb-12 flex-wrap">
             <div className="relative w-48 h-72 rounded-3xl overflow-hidden shadow-xl transform hover:scale-105 transition-transform">
               <Image
-                src="/hero-image.png"
+                src="/hero-image.webp"
                 alt="Event 1"
                 fill
                 className="object-cover"
@@ -209,7 +209,7 @@ export default function Home() {
             </div>
             <div className="relative w-48 h-72 rounded-3xl overflow-hidden shadow-xl transform hover:scale-105 transition-transform">
               <Image
-                src="/hero-image.png"
+                src="/hero-image.webp"
                 alt="Event 2"
                 fill
                 className="object-cover"
@@ -217,7 +217,7 @@ export default function Home() {
             </div>
             <div className="relative w-48 h-72 rounded-3xl overflow-hidden shadow-xl transform hover:scale-105 transition-transform">
               <Image
-                src="/hero-image.png"
+                src="/hero-image.webp"
                 alt="Event 3"
                 fill
                 className="object-cover"

@@ -11,11 +11,9 @@ export function Header() {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    // Check if user is logged in
-    if (authService.isAuthenticated()) {
-      const currentUser = authService.getCurrentUser();
-      setUser(currentUser);
-    }
+    authService.checkAuthStatus().then((data) => {
+      if (data) setUser(data);
+    }).catch(() => {});
   }, []);
 
   const handleLogout = async () => {

@@ -6,9 +6,17 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/contexts/AuthContext";
+import { z } from "zod/v4";
+
+const loginSchema = z.object({
+  email: z.string().min(1, "Email is required").email("Please enter a valid email"),
+  password: z.string().min(1, "Password is required"),
+});
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -29,26 +37,25 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Basic validation
-    const newErrors: { [key: string]: string } = {};
-    if (!formData.email) newErrors.email = "Email is required";
-    if (!formData.password) newErrors.password = "Password is required";
-
-    if (Object.keys(newErrors).length > 0) {
+    // Zod validation
+    const result = loginSchema.safeParse(formData);
+    if (!result.success) {
+      const newErrors: { [key: string]: string } = {};
+      for (const issue of result.error.issues) {
+        const field = issue.path[0];
+        if (field && typeof field === 'string') {
+          newErrors[field] = issue.message;
+        }
+      }
       setErrors(newErrors);
       setIsLoading(false);
       return;
     }
 
     try {
-      const { login } = await import('@/contexts/AuthContext').then(m => ({ login: async (creds: any) => {
-        const { authService } = await import('@/services/auth.service');
-        const response = await authService.login(creds);
-        window.location.href = '/';
-        return response;
-      }}));
-
       await login(formData);
+      // Navigation handled by AuthContext
+      router.push('/');
     } catch (error: any) {
       setErrors({ general: error.message || "Invalid email or password" });
     } finally {
@@ -64,7 +71,7 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 relative bg-baristas-brown-dark">
         <div className="absolute inset-0 z-0">
           <Image
-            src="/hero-image.png"
+            src="/hero-image.webp"
             alt="BARISTAS Interior"
             fill
             className="object-cover opacity-40"

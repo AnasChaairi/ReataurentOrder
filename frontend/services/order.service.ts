@@ -12,9 +12,7 @@ class OrderService {
       items: cart.items.map((cartItem) => ({
         menu_item: cartItem.menuItem.id,
         variant: cartItem.variant?.id,
-        addons: cartItem.addons.map((addon) => ({
-          addon: addon.addon.id,
-        })),
+        addons: cartItem.addons.map((addon) => addon.addon.id),
         quantity: cartItem.quantity,
         special_instructions: cartItem.special_instructions,
       })),
@@ -22,6 +20,14 @@ class OrderService {
     };
 
     const response = await api.post<Order>('/api/orders/', orderData);
+    return response.data;
+  }
+
+  /**
+   * Get orders with optional filters
+   */
+  async getOrders(params: Record<string, any> = {}): Promise<any> {
+    const response = await api.get('/api/orders/', { params });
     return response.data;
   }
 
@@ -45,7 +51,7 @@ class OrderService {
    * Get order by order number
    */
   async getOrderByNumber(orderNumber: string): Promise<Order> {
-    const response = await api.get<Order>(`/api/orders/${orderNumber}/`);
+    const response = await api.get<Order>(`/api/orders/by-number/${orderNumber}/`);
     return response.data;
   }
 

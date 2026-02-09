@@ -60,7 +60,7 @@ class MenuService {
 
   async getMenuItemAddons(slug: string): Promise<MenuItemAddon[]> {
     const menuItem = await this.getMenuItem(slug);
-    return menuItem.addons || [];
+    return menuItem.available_addons || [];
   }
 
   async getMenuItemReviews(slug: string): Promise<MenuItemReview[]> {

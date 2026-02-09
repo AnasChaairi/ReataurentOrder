@@ -28,7 +28,7 @@ class MenuCache:
         cache_key = cls.CATEGORY_LIST_KEY
 
         # Add user role to key if filtering is needed
-        if user and not user.is_admin:
+        if user and not getattr(user, 'is_admin', False):
             cache_key += ':active'
 
         return cache.get(cache_key)
@@ -38,7 +38,7 @@ class MenuCache:
         """Cache category list"""
         cache_key = cls.CATEGORY_LIST_KEY
 
-        if user and not user.is_admin:
+        if user and not getattr(user, 'is_admin', False):
             cache_key += ':active'
 
         cache.set(cache_key, data, cls.LIST_TIMEOUT)
@@ -60,7 +60,7 @@ class MenuCache:
         """Get cached menu item list"""
         cache_key = cls.MENU_ITEM_LIST_KEY
 
-        if user and not user.is_admin:
+        if user and not getattr(user, 'is_admin', False):
             cache_key += ':available'
 
         return cache.get(cache_key)
@@ -70,7 +70,7 @@ class MenuCache:
         """Cache menu item list"""
         cache_key = cls.MENU_ITEM_LIST_KEY
 
-        if user and not user.is_admin:
+        if user and not getattr(user, 'is_admin', False):
             cache_key += ':available'
 
         cache.set(cache_key, data, cls.LIST_TIMEOUT)
@@ -142,8 +142,18 @@ class MenuCache:
     @classmethod
     def invalidate_all(cls):
         """Invalidate all menu cache"""
-        # Get all cache keys pattern
-        cache.delete_pattern('menu:*')
+        # Try to use delete_pattern if available (Redis), otherwise delete specific keys
+        try:
+            cache.delete_pattern('menu:*')
+        except AttributeError:
+            # Fallback for cache backends that don't support delete_pattern (like LocMemCache)
+            cache.delete_many([
+                cls.CATEGORY_LIST_KEY,
+                cls.CATEGORY_LIST_KEY + ':active',
+                cls.MENU_ITEM_LIST_KEY,
+                cls.MENU_ITEM_LIST_KEY + ':available',
+                cls.FEATURED_ITEMS_KEY,
+            ])
 
     @classmethod
     def warm_cache(cls):

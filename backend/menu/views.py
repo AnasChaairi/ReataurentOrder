@@ -26,16 +26,25 @@ from django.http import HttpResponse
 class CategoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Category CRUD operations
-    - List/Retrieve: All authenticated users
+    - List/Retrieve: Public access (no authentication required)
     - Create/Update/Delete: Admin only
     """
     queryset = Category.objects.all()
-    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
     lookup_field = 'slug'
+
+    def get_permissions(self):
+        """
+        Allow public access for read operations, admin only for write operations
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAuthenticated, IsAdmin]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         """
@@ -43,8 +52,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
         """
         queryset = Category.objects.all()
 
-        # Non-admin users only see active categories
-        if not self.request.user.is_admin:
+        # Non-admin users (including anonymous) only see active categories
+        if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(is_active=True)
 
         return queryset
@@ -93,19 +102,31 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class MenuItemViewSet(viewsets.ModelViewSet):
     """
     ViewSet for MenuItem CRUD operations
-    - List/Retrieve: All authenticated users
+    - List/Retrieve: Public access (no authentication required)
     - Create/Update/Delete: Admin only
+    - Reviews: Authenticated users can add reviews
     """
     queryset = MenuItem.objects.select_related('category').prefetch_related(
         'variants', 'available_addons'
     )
-    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MenuItemFilter
     search_fields = ['name', 'description', 'ingredients']
     ordering_fields = ['name', 'price', 'created_at', 'category__name']
     ordering = ['category__order', 'name']
     lookup_field = 'slug'
+
+    def get_permissions(self):
+        """
+        Allow public access for read operations, admin for write operations
+        """
+        if self.action in ['list', 'retrieve', 'featured', 'popular', 'recommended', 'variants', 'addons', 'reviews']:
+            permission_classes = [AllowAny]
+        elif self.action == 'add_review':
+            permission_classes = [IsAuthenticated]
+        else:
+            permission_classes = [IsAuthenticated, IsAdmin]
+        return [permission() for permission in permission_classes]
 
     def get_queryset(self):
         """
@@ -115,8 +136,8 @@ class MenuItemViewSet(viewsets.ModelViewSet):
             'variants', 'available_addons'
         )
 
-        # Non-admin users only see available items in active categories
-        if not self.request.user.is_admin:
+        # Non-admin users (including anonymous) only see available items in active categories
+        if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(
                 is_available=True,
                 category__is_active=True
@@ -356,22 +377,31 @@ class MenuItemVariantViewSet(viewsets.ModelViewSet):
 class MenuItemAddonViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing MenuItem Add-ons
-    - List/Retrieve: All authenticated users
+    - List/Retrieve: Public access (no authentication required)
     - Create/Update/Delete: Admin only
     """
     queryset = MenuItemAddon.objects.prefetch_related('menu_items')
-    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['category', 'is_available']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'price', 'category']
     ordering = ['category', 'name']
 
+    def get_permissions(self):
+        """
+        Allow public access for read operations, admin only for write operations
+        """
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAuthenticated, IsAdmin]
+        return [permission() for permission in permission_classes]
+
     def get_queryset(self):
         """Filter available add-ons for non-admin users"""
         queryset = MenuItemAddon.objects.prefetch_related('menu_items')
 
-        if not self.request.user.is_admin:
+        if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(is_available=True)
 
         return queryset

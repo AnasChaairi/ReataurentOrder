@@ -9,8 +9,11 @@ import { Pagination } from "@/components/ui/Pagination";
 import MenuItemDetailModal from "@/components/ui/MenuItemDetailModal";
 import { menuService } from "@/services/menu.service";
 import { Category, MenuItemListItem, MenuItem } from "@/types/menu.types";
+import { useCart } from "@/contexts/CartContext";
+import { errorHandler } from "@/lib/errorHandler";
 
 export default function MenuPage() {
+  const { addToCart, toggleCart, isCartOpen } = useCart();
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemListItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
@@ -26,20 +29,30 @@ export default function MenuPage() {
 
   // Fetch categories
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchCategories = async () => {
       try {
         const data = await menuService.getCategories();
-        setCategories(data.filter(cat => cat.is_active));
-      } catch (err) {
-        console.error('Error fetching categories:', err);
+        if (!abortController.signal.aborted) {
+          setCategories(data.filter(cat => cat.is_active));
+        }
+      } catch (err: any) {
+        if (!abortController.signal.aborted && err.name !== 'AbortError') {
+          errorHandler.error('Failed to fetch categories', err as Error, { component: 'MenuPage' });
+        }
       }
     };
 
     fetchCategories();
+
+    return () => abortController.abort();
   }, []);
 
   // Fetch menu items
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchMenuItems = async () => {
       setIsLoading(true);
       setError(null);
@@ -55,24 +68,35 @@ export default function MenuPage() {
         }
 
         const response = await menuService.getMenuItems(params);
-        setMenuItems(response.results);
 
-        // Calculate total pages
-        const total = Math.ceil(response.count / 9);
-        setTotalPages(total);
+        if (!abortController.signal.aborted) {
+          setMenuItems(response.results);
+
+          // Calculate total pages
+          const total = Math.ceil(response.count / 9);
+          setTotalPages(total);
+        }
       } catch (err: any) {
-        console.error('Error fetching menu items:', err);
-        setError('Failed to load menu items. Please try again.');
-
-        // Use sample data as fallback
-        setMenuItems(sampleMenuItems);
-        setTotalPages(1);
+        if (!abortController.signal.aborted && err.name !== 'AbortError') {
+          errorHandler.error('Failed to fetch menu items', err as Error, {
+            component: 'MenuPage',
+            page: currentPage,
+            category: activeCategory
+          });
+          setError('Failed to load menu items. Please try again.');
+          setMenuItems([]);
+          setTotalPages(1);
+        }
       } finally {
-        setIsLoading(false);
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchMenuItems();
+
+    return () => abortController.abort();
   }, [activeCategory, currentPage]);
 
   const handleCategoryChange = (categoryId: number | null) => {
@@ -86,9 +110,57 @@ export default function MenuPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleAddToCart = (itemId: number, quantity: number) => {
-    console.log(`Added item ${itemId} with quantity ${quantity} to cart`);
-    // Quick add to cart - for items without variants/addons
+  const handleAddToCart = async (itemId: number, quantity: number) => {
+    const listItem = menuItems.find(item => item.id === itemId);
+    if (!listItem) return;
+
+    // If item has variants, open the detail modal so user can choose
+    if (listItem.has_variants) {
+      handleItemClick(listItem);
+      return;
+    }
+
+    // Try to fetch full item details; fall back to constructing from list data
+    let fullItem: MenuItem;
+    try {
+      fullItem = await menuService.getMenuItem(listItem.slug);
+    } catch {
+      fullItem = {
+        id: listItem.id,
+        category: listItem.category,
+        category_name: listItem.category_name,
+        category_slug: '',
+        name: listItem.name,
+        slug: listItem.slug,
+        description: listItem.description,
+        price: listItem.price,
+        image: listItem.image,
+        is_vegetarian: listItem.is_vegetarian,
+        is_vegan: listItem.is_vegan,
+        is_gluten_free: listItem.is_gluten_free,
+        preparation_time: listItem.preparation_time,
+        is_available: listItem.is_available,
+        is_featured: listItem.is_featured,
+        variants: [],
+        available_addons: [],
+        images: [],
+        average_rating: listItem.average_rating,
+        review_count: listItem.review_count,
+        created_at: '',
+        updated_at: '',
+      };
+    }
+
+    addToCart({
+      menuItem: fullItem,
+      addons: [],
+      quantity,
+    });
+
+    // Open cart sidebar to show feedback
+    if (!isCartOpen) {
+      toggleCart();
+    }
   };
 
   const handleItemClick = async (item: MenuItemListItem) => {
@@ -151,7 +223,12 @@ export default function MenuPage() {
           {error && !isLoading && (
             <div className="text-center py-20">
               <p className="text-red-600 mb-4">{error}</p>
-              <p className="text-gray-600">Showing sample items instead</p>
+              <button
+                onClick={() => { setError(null); setCurrentPage(1); }}
+                className="mt-2 px-6 py-3 bg-[#4A3428] text-white rounded-xl font-semibold hover:bg-[#3B2316] transition-colors"
+              >
+                Retry
+              </button>
             </div>
           )}
 
@@ -214,121 +291,3 @@ export default function MenuPage() {
   );
 }
 
-// Sample menu items for fallback
-const sampleMenuItems: MenuItemListItem[] = [
-  {
-    id: 1,
-    name: "GAUFRE TROIX CHOCOLAT",
-    slug: "gaufre-troix-chocolat",
-    description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: 8,
-    category: 1,
-    category_name: "Desserts",
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: true,
-    is_vegetarian: true,
-    is_vegan: false,
-    is_gluten_free: false,
-    preparation_time: 15,
-    has_variants: false,
-    average_rating: 0,
-    review_count: 0,
-  },
-  {
-    id: 2,
-    name: "CRÊPE KUNAFA PISTACHE",
-    description: "Creamy chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "7$ dh",
-    category: 1,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: true,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 3,
-    name: "BROWNIE BARISTAS",
-    description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "6$ dh",
-    category: 2,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: true,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 4,
-    name: "CRÊPE KUNAFA PISTACHE",
-    description: "Creamy chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "7$ dh",
-    category: 1,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: false,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 5,
-    name: "BROWNIE BARISTAS",
-    description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "6$ dh",
-    category: 2,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: false,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 6,
-    name: "GAUFRE TROIX CHOCOLAT",
-    description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "8$ dh",
-    category: 1,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: false,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 7,
-    name: "GAUFRE TROIX CHOCOLAT",
-    description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "8$ dh",
-    category: 1,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: false,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 8,
-    name: "CRÊPE KUNAFA PISTACHE",
-    description: "Creamy chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "7$ dh",
-    category: 1,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: false,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-  {
-    id: 9,
-    name: "BROWNIE BARISTAS",
-    description: "Caramel, chocolate ou lait et chocolat blanc, Biscuit Oreo",
-    price: "6$ dh",
-    category: 2,
-    image: "/hero-image.png",
-    is_available: true,
-    is_featured: false,
-    is_vegetarian: true,
-    is_vegan: false,
-  },
-];

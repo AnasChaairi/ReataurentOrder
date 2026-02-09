@@ -119,7 +119,7 @@ class IsWaiterForAssignedTable(permissions.BasePermission):
                 return WaiterAssignment.objects.filter(
                     waiter=request.user,
                     table=obj.table,
-                    is_active=True
+                    shift_end__isnull=True
                 ).exists()
 
         return False

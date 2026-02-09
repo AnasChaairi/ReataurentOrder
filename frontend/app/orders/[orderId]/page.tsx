@@ -20,6 +20,8 @@ export default function OrderTrackingPage() {
   const orderId = params.orderId as string;
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchOrderData = async () => {
       if (!orderId) return;
 
@@ -32,16 +34,24 @@ export default function OrderTrackingPage() {
         // Load order timeline
         try {
           const timeline = await orderService.getOrderTimeline(parseInt(orderId));
-          setOrderTimeline(timeline);
-        } catch (timelineError) {
-          console.error("Error loading timeline:", timelineError);
+          if (!abortController.signal.aborted) {
+            setOrderTimeline(timeline);
+          }
+        } catch (timelineError: any) {
+          if (!abortController.signal.aborted && timelineError.name !== 'AbortError') {
+            console.error("Error loading timeline:", timelineError);
+          }
           // Continue even if timeline fails
         }
       } catch (err: any) {
-        console.error("Error loading order:", err);
-        setError("Failed to load order details");
+        if (!abortController.signal.aborted && err.name !== 'AbortError') {
+          console.error("Error loading order:", err);
+          setError("Failed to load order details");
+        }
       } finally {
-        setIsLoading(false);
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -50,7 +60,10 @@ export default function OrderTrackingPage() {
     // Auto-refresh every 30 seconds
     const interval = setInterval(fetchOrderData, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      abortController.abort();
+    };
   }, [orderId, loadOrder]);
 
   if (isLoading) {
@@ -188,7 +201,7 @@ export default function OrderTrackingPage() {
                   <div key={index} className="flex gap-4 pb-4 border-b border-gray-200 last:border-0">
                     <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                       <Image
-                        src={item.menu_item_image || "/hero-image.png"}
+                        src={item.menu_item_image || "/hero-image.webp"}
                         alt={item.menu_item_name}
                         fill
                         className="object-cover"
@@ -227,16 +240,16 @@ export default function OrderTrackingPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-gray-700">
                     <span>Subtotal</span>
-                    <span>{currentOrder.subtotal_amount} DH</span>
+                    <span>{currentOrder.subtotal.toFixed(2)} DH</span>
                   </div>
                   <div className="flex justify-between text-gray-700">
                     <span>Tax</span>
-                    <span>{currentOrder.tax_amount} DH</span>
+                    <span>{currentOrder.tax.toFixed(2)} DH</span>
                   </div>
-                  {currentOrder.discount_amount > 0 && (
+                  {currentOrder.discount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Discount</span>
-                      <span>-{currentOrder.discount_amount} DH</span>
+                      <span>-{currentOrder.discount.toFixed(2)} DH</span>
                     </div>
                   )}
                   <div className="flex justify-between text-xl font-bold text-baristas-brown-dark pt-2 border-t border-gray-200">

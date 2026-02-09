@@ -28,6 +28,11 @@ export function AdminSidebar() {
       icon: "📦",
     },
     {
+      name: "Tables",
+      href: "/admin/tables",
+      icon: "🪑",
+    },
+    {
       name: "Waiters",
       href: "/admin/waiters",
       icon: "🧑‍🍳",
@@ -36,6 +41,11 @@ export function AdminSidebar() {
       name: "Users",
       href: "/admin/users",
       icon: "👥",
+    },
+    {
+      name: "Odoo Settings",
+      href: "/admin/odoo-settings",
+      icon: "⚙️",
     },
   ];
 

@@ -53,6 +53,7 @@ services:
     environment:
       - DEBUG=${DEBUG:-True}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
       - DB_NAME=${DB_NAME:-restaurant_order_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
@@ -82,6 +83,7 @@ services:
     environment:
       - DEBUG=${DEBUG:-True}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
       - DB_NAME=${DB_NAME:-restaurant_order_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
@@ -110,6 +112,7 @@ services:
     environment:
       - DEBUG=${DEBUG:-True}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
       - DB_NAME=${DB_NAME:-restaurant_order_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
@@ -140,6 +143,7 @@ services:
     environment:
       - DEBUG=${DEBUG:-True}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key}
+      - FIELD_ENCRYPTION_KEY=${FIELD_ENCRYPTION_KEY}
       - DB_NAME=${DB_NAME:-restaurant_order_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
