@@ -2,15 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAdmin } from "@/hooks/useAdmin";
+
+interface MenuItem {
+  name: string;
+  href: string;
+  icon: string;
+  adminOnly?: boolean;
+}
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const { isAdmin } = useAdmin();
 
-  const menuItems = [
+  const allMenuItems: MenuItem[] = [
     {
       name: "Dashboard",
       href: "/admin",
       icon: "📊",
+    },
+    {
+      name: "Restaurants",
+      href: "/admin/restaurants",
+      icon: "🏪",
+      adminOnly: true,
     },
     {
       name: "Menu Items",
@@ -32,15 +47,11 @@ export function AdminSidebar() {
       href: "/admin/tables",
       icon: "🪑",
     },
-    {
-      name: "Waiters",
-      href: "/admin/waiters",
-      icon: "🧑‍🍳",
-    },
-    {
+{
       name: "Users",
       href: "/admin/users",
       icon: "👥",
+      adminOnly: true,
     },
     {
       name: "Odoo Settings",
@@ -48,6 +59,11 @@ export function AdminSidebar() {
       icon: "⚙️",
     },
   ];
+
+  // Filter items based on role
+  const menuItems = allMenuItems.filter(
+    (item) => !item.adminOnly || isAdmin
+  );
 
   return (
     <aside className="w-64 bg-[#2D1810] text-white min-h-screen p-6">

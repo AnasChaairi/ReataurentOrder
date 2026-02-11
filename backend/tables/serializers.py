@@ -14,7 +14,7 @@ class TableSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'number', 'capacity', 'section', 'status',
             'qr_code', 'qr_code_data', 'floor', 'is_active', 'notes',
-            'assigned_waiter', 'current_session',
+            'restaurant', 'assigned_waiter', 'current_session',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['qr_code', 'qr_code_data', 'created_at', 'updated_at']
@@ -52,7 +52,7 @@ class TableListSerializer(serializers.ModelSerializer):
         model = Table
         fields = [
             'id', 'number', 'capacity', 'section', 'status',
-            'floor', 'is_active', 'assigned_waiter_name', 'is_occupied'
+            'floor', 'is_active', 'restaurant', 'assigned_waiter_name', 'is_occupied'
         ]
 
     def get_assigned_waiter_name(self, obj):
@@ -72,16 +72,18 @@ class TableCreateUpdateSerializer(serializers.ModelSerializer):
         model = Table
         fields = [
             'number', 'capacity', 'section', 'status',
-            'floor', 'is_active', 'notes'
+            'floor', 'is_active', 'notes', 'restaurant'
         ]
 
     def validate_number(self, value):
-        """Ensure table number is unique"""
+        """Ensure table number is unique within the restaurant"""
         instance = self.instance
-        if Table.objects.filter(number=value).exclude(
+        restaurant = self.initial_data.get('restaurant') or (instance.restaurant_id if instance else None)
+        qs = Table.objects.filter(number=value, restaurant_id=restaurant).exclude(
             pk=instance.pk if instance else None
-        ).exists():
-            raise serializers.ValidationError("Table with this number already exists.")
+        )
+        if qs.exists():
+            raise serializers.ValidationError("Table with this number already exists in this restaurant.")
         return value
 
     def validate_capacity(self, value):

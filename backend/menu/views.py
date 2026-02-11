@@ -7,6 +7,7 @@ from django.db.models import Q, Count
 import random
 
 from accounts.permissions import IsAdmin, IsAdminOrReadOnly
+from restaurants.mixins import RestaurantScopedMixin
 from .models import Category, MenuItem, MenuItemVariant, MenuItemAddon, MenuItemReview
 from .serializers import (
     CategorySerializer, CategoryListSerializer,
@@ -23,36 +24,38 @@ from .import_export import MenuExporter, MenuImporter
 from django.http import HttpResponse
 
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     """
     ViewSet for Category CRUD operations
     - List/Retrieve: Public access (no authentication required)
-    - Create/Update/Delete: Admin only
+    - Create/Update/Delete: Admin or Restaurant Owner only
     """
     queryset = Category.objects.all()
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
     lookup_field = 'slug'
 
     def get_permissions(self):
-        """
-        Allow public access for read operations, admin only for write operations
-        """
         if self.action in ['list', 'retrieve']:
             permission_classes = [AllowAny]
         else:
-            permission_classes = [IsAuthenticated, IsAdmin]
+            permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        """
-        Filter active categories for non-admin users
-        """
         queryset = Category.objects.all()
 
-        # Non-admin users (including anonymous) only see active categories
+        # Filter by restaurant query param (for public/tablet access)
+        restaurant_id = self.request.query_params.get('restaurant')
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
+
+        # Apply restaurant scoping for authenticated users
+        queryset = self.get_restaurant_queryset(queryset)
+
+        # Non-admin users only see active categories
         if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(is_active=True)
 
@@ -99,11 +102,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class MenuItemViewSet(viewsets.ModelViewSet):
+class MenuItemViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     """
     ViewSet for MenuItem CRUD operations
     - List/Retrieve: Public access (no authentication required)
-    - Create/Update/Delete: Admin only
+    - Create/Update/Delete: Admin or Restaurant Owner only
     - Reviews: Authenticated users can add reviews
     """
     queryset = MenuItem.objects.select_related('category').prefetch_related(
@@ -117,26 +120,28 @@ class MenuItemViewSet(viewsets.ModelViewSet):
     lookup_field = 'slug'
 
     def get_permissions(self):
-        """
-        Allow public access for read operations, admin for write operations
-        """
         if self.action in ['list', 'retrieve', 'featured', 'popular', 'recommended', 'variants', 'addons', 'reviews']:
             permission_classes = [AllowAny]
         elif self.action == 'add_review':
             permission_classes = [IsAuthenticated]
         else:
-            permission_classes = [IsAuthenticated, IsAdmin]
+            permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        """
-        Optimize queries and filter based on user permissions
-        """
         queryset = MenuItem.objects.select_related('category').prefetch_related(
             'variants', 'available_addons'
         )
 
-        # Non-admin users (including anonymous) only see available items in active categories
+        # Filter by restaurant query param (for public/tablet access)
+        restaurant_id = self.request.query_params.get('restaurant')
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
+
+        # Apply restaurant scoping for authenticated users
+        queryset = self.get_restaurant_queryset(queryset)
+
+        # Non-admin users only see available items in active categories
         if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(
                 is_available=True,

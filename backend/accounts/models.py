@@ -37,6 +37,7 @@ class User(AbstractUser):
 
     class Role(models.TextChoices):
         ADMIN = 'ADMIN', _('Admin')
+        RESTAURANT_OWNER = 'RESTAURANT_OWNER', _('Restaurant Owner')
         WAITER = 'WAITER', _('Waiter')
         CUSTOMER = 'CUSTOMER', _('Customer')
 
@@ -47,9 +48,19 @@ class User(AbstractUser):
     # User role
     role = models.CharField(
         _('role'),
-        max_length=10,
+        max_length=20,
         choices=Role.choices,
         default=Role.CUSTOMER,
+    )
+
+    # Restaurant association (for RESTAURANT_OWNER and staff)
+    restaurant = models.ForeignKey(
+        'restaurants.Restaurant',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='staff',
+        verbose_name=_('restaurant'),
     )
 
     # Additional fields
@@ -91,6 +102,11 @@ class User(AbstractUser):
     def is_customer(self):
         """Check if user is a customer."""
         return self.role == self.Role.CUSTOMER
+
+    @property
+    def is_restaurant_owner(self):
+        """Check if user is a restaurant owner."""
+        return self.role == self.Role.RESTAURANT_OWNER
 
 
 class UserProfile(models.Model):

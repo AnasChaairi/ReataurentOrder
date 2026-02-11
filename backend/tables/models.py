@@ -25,9 +25,16 @@ class Table(models.Model):
         ('BAR', 'Bar'),
     ]
 
+    restaurant = models.ForeignKey(
+        'restaurants.Restaurant',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='tables',
+        help_text="Restaurant this table belongs to"
+    )
     number = models.CharField(
         max_length=10,
-        unique=True,
         help_text="Table number or identifier (e.g., 'T1', 'A-5')"
     )
     capacity = models.IntegerField(
@@ -81,7 +88,6 @@ class Table(models.Model):
     odoo_table_id = models.IntegerField(
         null=True,
         blank=True,
-        unique=True,
         help_text="Odoo restaurant table ID"
     )
     odoo_last_synced = models.DateTimeField(
@@ -97,6 +103,7 @@ class Table(models.Model):
         verbose_name = "Table"
         verbose_name_plural = "Tables"
         ordering = ['section', 'number']
+        unique_together = [['restaurant', 'number']]
         indexes = [
             models.Index(fields=['status', 'is_active']),
             models.Index(fields=['section']),

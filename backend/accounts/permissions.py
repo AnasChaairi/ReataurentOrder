@@ -43,6 +43,32 @@ class IsCustomer(permissions.BasePermission):
         )
 
 
+class IsRestaurantOwner(permissions.BasePermission):
+    """Permission check for Restaurant Owner role."""
+
+    message = "Only restaurant owner users can access this resource."
+
+    def has_permission(self, request, view):
+        return (
+            request.user and
+            request.user.is_authenticated and
+            request.user.role == User.Role.RESTAURANT_OWNER
+        )
+
+
+class IsAdminOrRestaurantOwner(permissions.BasePermission):
+    """Permission check for Admin or Restaurant Owner roles."""
+
+    message = "Only admin or restaurant owner users can access this resource."
+
+    def has_permission(self, request, view):
+        return (
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in [User.Role.ADMIN, User.Role.RESTAURANT_OWNER]
+        )
+
+
 class IsAdminOrWaiter(permissions.BasePermission):
     """Permission check for Admin or Waiter roles."""
 
@@ -82,7 +108,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
-    Permission to only allow admins to edit.
+    Permission to only allow admins or restaurant owners to edit.
     Read-only access for all authenticated users.
     """
 
@@ -93,7 +119,7 @@ class IsAdminOrReadOnly(permissions.BasePermission):
         return (
             request.user and
             request.user.is_authenticated and
-            request.user.role == User.Role.ADMIN
+            request.user.role in [User.Role.ADMIN, User.Role.RESTAURANT_OWNER]
         )
 
 

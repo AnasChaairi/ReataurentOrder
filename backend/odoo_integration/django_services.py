@@ -317,7 +317,7 @@ class OdooMenuSyncService:
         self.product_service = ProductService(self.client)
 
     @transaction.atomic
-    def sync_menu_from_odoo(self, user=None) -> Dict:
+    def sync_menu_from_odoo(self, user=None, restaurant=None) -> Dict:
         """
         Pull products from Odoo and update Django menu.
 
@@ -367,13 +367,19 @@ class OdooMenuSyncService:
                     odoo_cat_name = product['categ_id'][1]
 
                     if odoo_cat_id not in category_map:
-                        # Create or update category
+                        # Create or update category (scoped to restaurant)
+                        lookup = {'odoo_category_id': odoo_cat_id}
+                        if restaurant:
+                            lookup['restaurant'] = restaurant
+                        defaults = {
+                            'name': odoo_cat_name,
+                            'odoo_last_synced': timezone.now(),
+                        }
+                        if restaurant:
+                            defaults['restaurant'] = restaurant
                         category, created = Category.objects.update_or_create(
-                            odoo_category_id=odoo_cat_id,
-                            defaults={
-                                'name': odoo_cat_name,
-                                'odoo_last_synced': timezone.now(),
-                            }
+                            **lookup,
+                            defaults=defaults,
                         )
                         category_map[odoo_cat_id] = category
 
@@ -390,13 +396,18 @@ class OdooMenuSyncService:
                 # Get Django category
                 category = category_map.get(odoo_cat_id)
                 if not category:
-                    # Use default category
+                    # Use default category (scoped to restaurant)
+                    cat_lookup = {'name': 'Uncategorized'}
+                    cat_defaults = {'odoo_last_synced': timezone.now()}
+                    if restaurant:
+                        cat_lookup['restaurant'] = restaurant
+                        cat_defaults['restaurant'] = restaurant
                     category, _ = Category.objects.get_or_create(
-                        name='Uncategorized',
-                        defaults={'odoo_last_synced': timezone.now()}
+                        **cat_lookup,
+                        defaults=cat_defaults,
                     )
 
-                # Create or update menu item
+                # Create or update menu item (scoped to restaurant)
                 defaults = {
                     'name': product['name'],
                     'price': Decimal(str(product.get('list_price', 0))),
@@ -404,11 +415,16 @@ class OdooMenuSyncService:
                     'is_available': product.get('available_in_pos', True),
                     'odoo_last_synced': timezone.now(),
                 }
+                if restaurant:
+                    defaults['restaurant'] = restaurant
 
-                # Create minimal description if not exists
+                lookup = {'odoo_product_id': odoo_product_id}
+                if restaurant:
+                    lookup['restaurant'] = restaurant
+
                 item, created = MenuItem.objects.update_or_create(
-                    odoo_product_id=odoo_product_id,
-                    defaults=defaults
+                    **lookup,
+                    defaults=defaults,
                 )
 
                 # Set description if newly created and empty
@@ -459,7 +475,7 @@ class OdooTableSyncService:
         self.pos_service = POSService(self.client)
 
     @transaction.atomic
-    def sync_tables_from_odoo(self, user=None) -> Dict:
+    def sync_tables_from_odoo(self, user=None, restaurant=None) -> Dict:
         """
         Pull floors and tables from Odoo and update Django tables.
 
@@ -532,8 +548,11 @@ class OdooTableSyncService:
                     section = self._map_floor_to_section(floor_name)
 
                     try:
+                        # Scope queries to restaurant if provided
+                        base_qs = Table.objects.filter(restaurant=restaurant) if restaurant else Table.objects.all()
+
                         # First, check if a Django table already exists with this odoo_table_id
-                        existing_by_odoo_id = Table.objects.filter(odoo_table_id=odoo_table_id).first()
+                        existing_by_odoo_id = base_qs.filter(odoo_table_id=odoo_table_id).first()
 
                         if existing_by_odoo_id:
                             # Update existing mapped table
@@ -548,7 +567,9 @@ class OdooTableSyncService:
                             logger.debug(f"Updated table '{table_name}' (Odoo ID: {odoo_table_id})")
                         else:
                             # Check if a table with this name already exists (manual table)
-                            existing_by_name = Table.objects.filter(number=table_name).first()
+                            existing_by_name = base_qs.filter(number=table_name).first()
+
+                            extra = {'restaurant': restaurant} if restaurant else {}
 
                             if existing_by_name and existing_by_name.odoo_table_id is None:
                                 # Link existing manual table to Odoo
@@ -561,8 +582,6 @@ class OdooTableSyncService:
                                 stats['tables_updated'] += 1
                                 logger.info(f"Linked existing table '{table_name}' to Odoo ID: {odoo_table_id}")
                             elif existing_by_name and existing_by_name.odoo_table_id != odoo_table_id:
-                                # Name conflict: another Odoo table has this name
-                                # Append Odoo ID to make unique
                                 unique_name = f"{table_name}-{odoo_table_id}"
                                 Table.objects.create(
                                     number=unique_name,
@@ -572,6 +591,7 @@ class OdooTableSyncService:
                                     odoo_floor_id=floor_id,
                                     odoo_last_synced=timezone.now(),
                                     is_active=True,
+                                    **extra,
                                 )
                                 stats['tables_created'] += 1
                                 logger.warning(
@@ -579,7 +599,6 @@ class OdooTableSyncService:
                                     f"(Odoo ID: {odoo_table_id})"
                                 )
                             else:
-                                # Create new table
                                 Table.objects.create(
                                     number=table_name,
                                     capacity=table_seats,
@@ -588,6 +607,7 @@ class OdooTableSyncService:
                                     odoo_floor_id=floor_id,
                                     odoo_last_synced=timezone.now(),
                                     is_active=True,
+                                    **extra,
                                 )
                                 stats['tables_created'] += 1
                                 logger.info(f"Created table '{table_name}' (Odoo ID: {odoo_table_id})")
@@ -602,9 +622,10 @@ class OdooTableSyncService:
 
             # Deactivate tables that no longer exist in Odoo
             if synced_odoo_table_ids:
-                stale_tables = Table.objects.filter(
-                    odoo_table_id__isnull=False
-                ).exclude(
+                stale_qs = Table.objects.filter(odoo_table_id__isnull=False)
+                if restaurant:
+                    stale_qs = stale_qs.filter(restaurant=restaurant)
+                stale_tables = stale_qs.exclude(
                     odoo_table_id__in=synced_odoo_table_ids
                 )
                 stale_count = stale_tables.update(is_active=False)

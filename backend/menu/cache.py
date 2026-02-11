@@ -1,5 +1,6 @@
 """
-Menu caching service for improving performance
+Menu caching service for improving performance.
+Cache keys are scoped by restaurant ID.
 """
 from django.core.cache import cache
 from django.conf import settings
@@ -7,181 +8,155 @@ from .models import Category, MenuItem
 
 
 class MenuCache:
-    """Service for caching menu data"""
+    """Service for caching menu data, scoped by restaurant."""
 
-    # Cache keys
-    CATEGORY_LIST_KEY = 'menu:categories:list'
-    CATEGORY_DETAIL_KEY = 'menu:category:{slug}'
-    MENU_ITEM_LIST_KEY = 'menu:items:list'
-    MENU_ITEM_DETAIL_KEY = 'menu:item:{slug}'
-    FEATURED_ITEMS_KEY = 'menu:items:featured'
-    CATEGORY_ITEMS_KEY = 'menu:category:{slug}:items'
+    # Cache key templates — {rid} is restaurant ID (0 for global/unscoped)
+    CATEGORY_LIST_KEY = 'menu:r{rid}:categories:list'
+    CATEGORY_DETAIL_KEY = 'menu:r{rid}:category:{slug}'
+    MENU_ITEM_LIST_KEY = 'menu:r{rid}:items:list'
+    MENU_ITEM_DETAIL_KEY = 'menu:r{rid}:item:{slug}'
+    FEATURED_ITEMS_KEY = 'menu:r{rid}:items:featured'
+    CATEGORY_ITEMS_KEY = 'menu:r{rid}:category:{slug}:items'
 
     # Cache timeouts (in seconds)
     DEFAULT_TIMEOUT = getattr(settings, 'MENU_CACHE_TIMEOUT', 60 * 60)  # 1 hour
     LIST_TIMEOUT = getattr(settings, 'MENU_LIST_CACHE_TIMEOUT', 60 * 30)  # 30 minutes
     DETAIL_TIMEOUT = getattr(settings, 'MENU_DETAIL_CACHE_TIMEOUT', 60 * 60)  # 1 hour
 
-    @classmethod
-    def get_category_list(cls, user=None):
-        """Get cached category list"""
-        cache_key = cls.CATEGORY_LIST_KEY
+    @staticmethod
+    def _rid(user=None, restaurant_id=None):
+        """Get restaurant ID for cache key."""
+        if restaurant_id:
+            return restaurant_id
+        if user and hasattr(user, 'restaurant_id') and user.restaurant_id:
+            return user.restaurant_id
+        return 0
 
-        # Add user role to key if filtering is needed
+    @classmethod
+    def get_category_list(cls, user=None, restaurant_id=None):
+        rid = cls._rid(user, restaurant_id)
+        cache_key = cls.CATEGORY_LIST_KEY.format(rid=rid)
         if user and not getattr(user, 'is_admin', False):
             cache_key += ':active'
-
         return cache.get(cache_key)
 
     @classmethod
-    def set_category_list(cls, data, user=None):
-        """Cache category list"""
-        cache_key = cls.CATEGORY_LIST_KEY
-
+    def set_category_list(cls, data, user=None, restaurant_id=None):
+        rid = cls._rid(user, restaurant_id)
+        cache_key = cls.CATEGORY_LIST_KEY.format(rid=rid)
         if user and not getattr(user, 'is_admin', False):
             cache_key += ':active'
-
         cache.set(cache_key, data, cls.LIST_TIMEOUT)
 
     @classmethod
-    def get_category_detail(cls, slug):
-        """Get cached category details"""
-        cache_key = cls.CATEGORY_DETAIL_KEY.format(slug=slug)
+    def get_category_detail(cls, slug, restaurant_id=0):
+        cache_key = cls.CATEGORY_DETAIL_KEY.format(rid=restaurant_id, slug=slug)
         return cache.get(cache_key)
 
     @classmethod
-    def set_category_detail(cls, slug, data):
-        """Cache category details"""
-        cache_key = cls.CATEGORY_DETAIL_KEY.format(slug=slug)
+    def set_category_detail(cls, slug, data, restaurant_id=0):
+        cache_key = cls.CATEGORY_DETAIL_KEY.format(rid=restaurant_id, slug=slug)
         cache.set(cache_key, data, cls.DETAIL_TIMEOUT)
 
     @classmethod
-    def get_menu_item_list(cls, user=None):
-        """Get cached menu item list"""
-        cache_key = cls.MENU_ITEM_LIST_KEY
-
+    def get_menu_item_list(cls, user=None, restaurant_id=None):
+        rid = cls._rid(user, restaurant_id)
+        cache_key = cls.MENU_ITEM_LIST_KEY.format(rid=rid)
         if user and not getattr(user, 'is_admin', False):
             cache_key += ':available'
-
         return cache.get(cache_key)
 
     @classmethod
-    def set_menu_item_list(cls, data, user=None):
-        """Cache menu item list"""
-        cache_key = cls.MENU_ITEM_LIST_KEY
-
+    def set_menu_item_list(cls, data, user=None, restaurant_id=None):
+        rid = cls._rid(user, restaurant_id)
+        cache_key = cls.MENU_ITEM_LIST_KEY.format(rid=rid)
         if user and not getattr(user, 'is_admin', False):
             cache_key += ':available'
-
         cache.set(cache_key, data, cls.LIST_TIMEOUT)
 
     @classmethod
-    def get_menu_item_detail(cls, slug):
-        """Get cached menu item details"""
-        cache_key = cls.MENU_ITEM_DETAIL_KEY.format(slug=slug)
+    def get_menu_item_detail(cls, slug, restaurant_id=0):
+        cache_key = cls.MENU_ITEM_DETAIL_KEY.format(rid=restaurant_id, slug=slug)
         return cache.get(cache_key)
 
     @classmethod
-    def set_menu_item_detail(cls, slug, data):
-        """Cache menu item details"""
-        cache_key = cls.MENU_ITEM_DETAIL_KEY.format(slug=slug)
+    def set_menu_item_detail(cls, slug, data, restaurant_id=0):
+        cache_key = cls.MENU_ITEM_DETAIL_KEY.format(rid=restaurant_id, slug=slug)
         cache.set(cache_key, data, cls.DETAIL_TIMEOUT)
 
     @classmethod
-    def get_featured_items(cls):
-        """Get cached featured items"""
-        return cache.get(cls.FEATURED_ITEMS_KEY)
+    def get_featured_items(cls, restaurant_id=0):
+        return cache.get(cls.FEATURED_ITEMS_KEY.format(rid=restaurant_id))
 
     @classmethod
-    def set_featured_items(cls, data):
-        """Cache featured items"""
-        cache.set(cls.FEATURED_ITEMS_KEY, data, cls.LIST_TIMEOUT)
+    def set_featured_items(cls, data, restaurant_id=0):
+        cache.set(cls.FEATURED_ITEMS_KEY.format(rid=restaurant_id), data, cls.LIST_TIMEOUT)
 
     @classmethod
-    def get_category_items(cls, category_slug):
-        """Get cached items for a category"""
-        cache_key = cls.CATEGORY_ITEMS_KEY.format(slug=category_slug)
+    def get_category_items(cls, category_slug, restaurant_id=0):
+        cache_key = cls.CATEGORY_ITEMS_KEY.format(rid=restaurant_id, slug=category_slug)
         return cache.get(cache_key)
 
     @classmethod
-    def set_category_items(cls, category_slug, data):
-        """Cache items for a category"""
-        cache_key = cls.CATEGORY_ITEMS_KEY.format(slug=category_slug)
+    def set_category_items(cls, category_slug, data, restaurant_id=0):
+        cache_key = cls.CATEGORY_ITEMS_KEY.format(rid=restaurant_id, slug=category_slug)
         cache.set(cache_key, data, cls.LIST_TIMEOUT)
 
     @classmethod
-    def invalidate_category(cls, category_slug=None):
-        """Invalidate category cache"""
+    def invalidate_category(cls, category_slug=None, restaurant_id=0):
+        rid = restaurant_id
         if category_slug:
-            # Invalidate specific category
-            cache.delete(cls.CATEGORY_DETAIL_KEY.format(slug=category_slug))
-            cache.delete(cls.CATEGORY_ITEMS_KEY.format(slug=category_slug))
-
-        # Invalidate category lists
-        cache.delete(cls.CATEGORY_LIST_KEY)
-        cache.delete(cls.CATEGORY_LIST_KEY + ':active')
+            cache.delete(cls.CATEGORY_DETAIL_KEY.format(rid=rid, slug=category_slug))
+            cache.delete(cls.CATEGORY_ITEMS_KEY.format(rid=rid, slug=category_slug))
+        cache.delete(cls.CATEGORY_LIST_KEY.format(rid=rid))
+        cache.delete(cls.CATEGORY_LIST_KEY.format(rid=rid) + ':active')
 
     @classmethod
-    def invalidate_menu_item(cls, menu_item_slug=None, category_slug=None):
-        """Invalidate menu item cache"""
+    def invalidate_menu_item(cls, menu_item_slug=None, category_slug=None, restaurant_id=0):
+        rid = restaurant_id
         if menu_item_slug:
-            # Invalidate specific menu item
-            cache.delete(cls.MENU_ITEM_DETAIL_KEY.format(slug=menu_item_slug))
-
-        # Invalidate menu item lists
-        cache.delete(cls.MENU_ITEM_LIST_KEY)
-        cache.delete(cls.MENU_ITEM_LIST_KEY + ':available')
-
-        # Invalidate featured items
-        cache.delete(cls.FEATURED_ITEMS_KEY)
-
-        # Invalidate category items if category provided
+            cache.delete(cls.MENU_ITEM_DETAIL_KEY.format(rid=rid, slug=menu_item_slug))
+        cache.delete(cls.MENU_ITEM_LIST_KEY.format(rid=rid))
+        cache.delete(cls.MENU_ITEM_LIST_KEY.format(rid=rid) + ':available')
+        cache.delete(cls.FEATURED_ITEMS_KEY.format(rid=rid))
         if category_slug:
-            cache.delete(cls.CATEGORY_ITEMS_KEY.format(slug=category_slug))
+            cache.delete(cls.CATEGORY_ITEMS_KEY.format(rid=rid, slug=category_slug))
 
     @classmethod
     def invalidate_all(cls):
         """Invalidate all menu cache"""
-        # Try to use delete_pattern if available (Redis), otherwise delete specific keys
         try:
             cache.delete_pattern('menu:*')
         except AttributeError:
-            # Fallback for cache backends that don't support delete_pattern (like LocMemCache)
-            cache.delete_many([
-                cls.CATEGORY_LIST_KEY,
-                cls.CATEGORY_LIST_KEY + ':active',
-                cls.MENU_ITEM_LIST_KEY,
-                cls.MENU_ITEM_LIST_KEY + ':available',
-                cls.FEATURED_ITEMS_KEY,
-            ])
+            # Fallback for cache backends that don't support delete_pattern
+            pass
 
     @classmethod
-    def warm_cache(cls):
+    def warm_cache(cls, restaurant_id=0):
         """
-        Warm up cache with frequently accessed data
-        This can be called on deployment or as a scheduled task
+        Warm up cache with frequently accessed data.
         """
         from .serializers import CategoryListSerializer, MenuItemListSerializer
 
-        # Warm category cache
-        categories = Category.objects.filter(is_active=True).order_by('order', 'name')
-        category_data = CategoryListSerializer(categories, many=True).data
-        cls.set_category_list(category_data, user=None)
+        cat_qs = Category.objects.filter(is_active=True).order_by('order', 'name')
+        if restaurant_id:
+            cat_qs = cat_qs.filter(restaurant_id=restaurant_id)
 
-        # Warm menu items cache
-        menu_items = MenuItem.objects.select_related('category').prefetch_related(
+        category_data = CategoryListSerializer(cat_qs, many=True).data
+        cls.set_category_list(category_data, restaurant_id=restaurant_id)
+
+        item_qs = MenuItem.objects.select_related('category').prefetch_related(
             'variants', 'available_addons'
-        ).filter(
-            is_available=True,
-            category__is_active=True
-        )
-        menu_item_data = MenuItemListSerializer(menu_items, many=True).data
-        cls.set_menu_item_list(menu_item_data, user=None)
+        ).filter(is_available=True, category__is_active=True)
+        if restaurant_id:
+            item_qs = item_qs.filter(restaurant_id=restaurant_id)
 
-        # Warm featured items cache
-        featured_items = menu_items.filter(is_featured=True)
+        menu_item_data = MenuItemListSerializer(item_qs, many=True).data
+        cls.set_menu_item_list(menu_item_data, restaurant_id=restaurant_id)
+
+        featured_items = item_qs.filter(is_featured=True)
         featured_data = MenuItemListSerializer(featured_items, many=True).data
-        cls.set_featured_items(featured_data)
+        cls.set_featured_items(featured_data, restaurant_id=restaurant_id)
 
         return {
             'categories_cached': len(category_data),

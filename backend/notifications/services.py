@@ -6,6 +6,13 @@ from channels.layers import get_channel_layer
 logger = logging.getLogger(__name__)
 
 
+def _get_kitchen_group(order):
+    """Get the kitchen WebSocket group name for an order's restaurant."""
+    if order.restaurant_id:
+        return f'restaurant_{order.restaurant_id}_kitchen'
+    return 'kitchen'
+
+
 def _get_order_data(order):
     """Serialize order data for WebSocket messages."""
     return {
@@ -14,6 +21,7 @@ def _get_order_data(order):
         'status': order.status,
         'table_id': order.table_id,
         'table_number': order.table.number,
+        'restaurant_id': order.restaurant_id,
         'total_amount': str(order.total_amount),
         'items_count': order.items.count(),
         'items': [
@@ -37,9 +45,9 @@ def notify_order_created(order):
 
     order_data = _get_order_data(order)
 
-    # Notify kitchen
+    # Notify kitchen (restaurant-scoped)
     async_to_sync(channel_layer.group_send)(
-        'kitchen',
+        _get_kitchen_group(order),
         {
             'type': 'order_created',
             'order': order_data,
@@ -80,9 +88,9 @@ def notify_order_status_change(order, old_status, new_status):
         message,
     )
 
-    # Notify kitchen
+    # Notify kitchen (restaurant-scoped)
     async_to_sync(channel_layer.group_send)(
-        'kitchen',
+        _get_kitchen_group(order),
         message,
     )
 
@@ -113,13 +121,13 @@ def notify_order_cancelled(order, reason=''):
         'reason': reason,
     }
 
-    # Notify table, kitchen, and waiter
+    # Notify table, kitchen (restaurant-scoped), and waiter
     async_to_sync(channel_layer.group_send)(
         f'table_{order.table_id}',
         message,
     )
     async_to_sync(channel_layer.group_send)(
-        'kitchen',
+        _get_kitchen_group(order),
         message,
     )
     if order.waiter_id:

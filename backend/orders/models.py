@@ -20,6 +20,14 @@ class Order(models.Model):
     ]
 
     # Relations
+    restaurant = models.ForeignKey(
+        'restaurants.Restaurant',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='orders',
+        help_text="Restaurant this order belongs to"
+    )
     table = models.ForeignKey(
         Table,
         on_delete=models.CASCADE,
@@ -144,7 +152,11 @@ class Order(models.Model):
         return f"Order {self.order_number} - Table {self.table.number}"
 
     def save(self, *args, **kwargs):
-        """Auto-generate order number"""
+        """Auto-generate order number and set restaurant from table"""
+        # Auto-set restaurant from table
+        if not self.restaurant_id and self.table_id:
+            self.restaurant_id = self.table.restaurant_id
+
         if not self.order_number:
             # Generate order number: ORD-YYYYMMDD-XXXXX
             from django.utils import timezone

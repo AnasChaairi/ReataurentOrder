@@ -2,33 +2,37 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { authService } from '@/services/auth.service';
+import { authService, User } from '@/services/auth.service';
 
 export function useAdmin() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkAdmin = async () => {
-      const user = await authService.checkAuthStatus();
+      const currentUser = await authService.checkAuthStatus();
 
-      if (!user) {
+      if (!currentUser) {
         router.push('/auth/login');
         return;
       }
 
-      if (user.role !== 'ADMIN') {
+      if (currentUser.role !== 'ADMIN' && currentUser.role !== 'RESTAURANT_OWNER') {
         router.push('/');
         return;
       }
 
-      setIsAdmin(true);
+      setUser(currentUser);
+      setIsAdmin(currentUser.role === 'ADMIN');
+      setIsOwner(currentUser.role === 'RESTAURANT_OWNER');
       setIsLoading(false);
     };
 
     checkAdmin();
   }, [router]);
 
-  return { isAdmin, isLoading };
+  return { isAdmin, isOwner, user, isLoading };
 }

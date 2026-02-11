@@ -41,7 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authService.login(credentials);
       setUser(response.user);
-      router.push('/');
+      const role = response.user.role;
+      if (role === 'ADMIN' || role === 'RESTAURANT_OWNER') {
+        router.push('/admin');
+      } else {
+        router.push('/');
+      }
     } catch (error: any) {
       console.error('Login error:', error);
       throw new Error(error.response?.data?.detail || 'Login failed');

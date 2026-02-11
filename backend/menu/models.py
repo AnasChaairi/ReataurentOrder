@@ -7,8 +7,16 @@ from decimal import Decimal
 
 class Category(models.Model):
     """Menu category model for organizing menu items"""
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=120, unique=True, blank=True)
+    restaurant = models.ForeignKey(
+        'restaurants.Restaurant',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='categories',
+        help_text="Restaurant this category belongs to"
+    )
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=120, blank=True)
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to='categories/', blank=True, null=True)
     order = models.IntegerField(default=0, help_text="Display order (lower numbers first)")
@@ -18,7 +26,6 @@ class Category(models.Model):
     odoo_category_id = models.IntegerField(
         null=True,
         blank=True,
-        unique=True,
         help_text="Odoo product category ID"
     )
     odoo_last_synced = models.DateTimeField(
@@ -34,6 +41,7 @@ class Category(models.Model):
         verbose_name = "Category"
         verbose_name_plural = "Categories"
         ordering = ['order', 'name']
+        unique_together = [['restaurant', 'name'], ['restaurant', 'slug']]
 
     def __str__(self):
         return self.name
@@ -47,13 +55,21 @@ class Category(models.Model):
 
 class MenuItem(models.Model):
     """Menu item (dish) model"""
+    restaurant = models.ForeignKey(
+        'restaurants.Restaurant',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='menu_items',
+        help_text="Restaurant this item belongs to"
+    )
     category = models.ForeignKey(
         Category,
         on_delete=models.CASCADE,
         related_name='items'
     )
     name = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=220, unique=True, blank=True)
+    slug = models.SlugField(max_length=220, blank=True)
     description = models.TextField()
     price = models.DecimalField(
         max_digits=10,
@@ -81,7 +97,7 @@ class MenuItem(models.Model):
     is_featured = models.BooleanField(default=False)
 
     # Odoo integration
-    odoo_product_id = models.IntegerField(blank=True, null=True, unique=True)
+    odoo_product_id = models.IntegerField(blank=True, null=True)
     odoo_last_synced = models.DateTimeField(
         null=True,
         blank=True,
@@ -95,6 +111,7 @@ class MenuItem(models.Model):
         verbose_name = "Menu Item"
         verbose_name_plural = "Menu Items"
         ordering = ['category', 'name']
+        unique_together = [['restaurant', 'slug']]
         indexes = [
             models.Index(fields=['category', 'is_available']),
             models.Index(fields=['is_featured']),

@@ -21,6 +21,11 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface UserRestaurant {
+  id: number;
+  name: string;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -29,6 +34,8 @@ export interface User {
   phone_number: string;
   role: string;
   is_active: boolean;
+  restaurant?: number | null;
+  restaurant_detail?: UserRestaurant | null;
 }
 
 class AuthService {

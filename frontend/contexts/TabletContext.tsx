@@ -120,6 +120,7 @@ export function TabletProvider({ children }: TabletProviderProps) {
         capacity: tableData.capacity,
         floor: tableData.floor,
         status: tableData.status,
+        restaurant_id: tableData.restaurant,
         is_active: tableData.is_active,
         qr_code: tableData.qr_code,
       });

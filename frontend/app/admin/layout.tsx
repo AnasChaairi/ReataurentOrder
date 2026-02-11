@@ -8,7 +8,7 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAdmin, isLoading } = useAdmin();
+  const { isAdmin, isOwner, isLoading } = useAdmin();
 
   if (isLoading) {
     return (
@@ -21,7 +21,7 @@ export default function AdminLayout({
     );
   }
 
-  if (!isAdmin) {
+  if (!isAdmin && !isOwner) {
     return null;
   }
 

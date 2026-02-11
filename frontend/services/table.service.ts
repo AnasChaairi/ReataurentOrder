@@ -8,6 +8,7 @@ export interface Table {
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'MAINTENANCE';
   floor: number;
   is_active: boolean;
+  restaurant?: number | null;
   qr_code?: string;
   current_session?: TableSession;
 }

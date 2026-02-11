@@ -7,6 +7,7 @@ export interface TabletTable {
   capacity: number;
   floor: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'MAINTENANCE';
+  restaurant_id?: number | null;
   odoo_table_id?: number;
   odoo_last_synced?: string;
   is_active: boolean;

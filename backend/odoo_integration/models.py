@@ -114,10 +114,7 @@ class OdooConfig(models.Model):
         return f"{self.name} ({status})"
 
     def save(self, *args, **kwargs):
-        """Ensure only one configuration is active at a time"""
-        if self.is_active:
-            # Deactivate all other configurations
-            OdooConfig.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
+        """Save configuration. Active enforcement is now per-restaurant via Restaurant.odoo_config."""
         super().save(*args, **kwargs)
 
     @property

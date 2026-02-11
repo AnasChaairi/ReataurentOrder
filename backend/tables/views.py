@@ -6,6 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 
 from accounts.permissions import IsAdmin, IsAdminOrReadOnly, IsWaiter, IsAdminOrWaiter
+from restaurants.mixins import RestaurantScopedMixin
 from .models import Table, WaiterAssignment, TableSession
 from .serializers import (
     TableSerializer, TableListSerializer, TableCreateUpdateSerializer,
@@ -15,7 +16,7 @@ from .serializers import (
 )
 
 
-class TableViewSet(viewsets.ModelViewSet):
+class TableViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     queryset = Table.objects.all()
     permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -25,6 +26,7 @@ class TableViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Table.objects.all()
+        queryset = self.get_restaurant_queryset(queryset)
         if not self.request.user.is_admin:
             queryset = queryset.filter(is_active=True)
         return queryset

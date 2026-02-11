@@ -19,6 +19,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['role'] = user.role
         token['email'] = user.email
         token['full_name'] = user.get_full_name()
+        if user.restaurant_id:
+            token['restaurant_id'] = user.restaurant_id
 
         return token
 
@@ -26,7 +28,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
 
         # Add extra user info to response
-        data['user'] = {
+        user_data = {
             'id': self.user.id,
             'email': self.user.email,
             'first_name': self.user.first_name,
@@ -34,6 +36,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'role': self.user.role,
             'is_active': self.user.is_active,
         }
+        if self.user.restaurant_id:
+            user_data['restaurant'] = {
+                'id': self.user.restaurant.id,
+                'name': self.user.restaurant.name,
+            }
+        data['user'] = user_data
 
         return data
 
@@ -53,10 +61,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
         ]
 
 
+class UserRestaurantSerializer(serializers.Serializer):
+    """Inline serializer for restaurant info in user responses."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model."""
 
     profile = UserProfileSerializer(read_only=True)
+    restaurant_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -68,12 +83,19 @@ class UserSerializer(serializers.ModelSerializer):
             'phone_number',
             'avatar',
             'role',
+            'restaurant',
+            'restaurant_detail',
             'is_active',
             'created_at',
             'updated_at',
             'profile',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_active']
+
+    def get_restaurant_detail(self, obj):
+        if obj.restaurant:
+            return {'id': obj.restaurant.id, 'name': obj.restaurant.name}
+        return None
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -229,6 +251,7 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
             'last_name',
             'phone_number',
             'role',
+            'restaurant',
             'is_active',
         ]
 
@@ -252,6 +275,7 @@ class AdminUserUpdateSerializer(serializers.ModelSerializer):
             'last_name',
             'phone_number',
             'role',
+            'restaurant',
             'is_active',
             'avatar',
         ]

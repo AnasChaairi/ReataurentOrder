@@ -28,8 +28,9 @@ export interface MenuItemsResponse {
 }
 
 class MenuService {
-  async getCategories(): Promise<Category[]> {
-    const response = await api.get<Category[]>('/api/menu/categories/');
+  async getCategories(restaurant?: number): Promise<Category[]> {
+    const params = restaurant ? { restaurant } : undefined;
+    const response = await api.get<Category[]>('/api/menu/categories/', { params });
     return response.data;
   }
 
@@ -40,6 +41,7 @@ class MenuService {
     is_vegan?: boolean;
     page?: number;
     page_size?: number;
+    restaurant?: number;
   }): Promise<MenuItemsResponse> {
     const response = await api.get<MenuItemsResponse>('/api/menu/items/', { params });
     return response.data;
@@ -90,40 +92,32 @@ class MenuService {
 
   async createMenuItem(data: FormData): Promise<MenuItem> {
     const response = await api.post<MenuItem>('/api/menu/items/', data, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': undefined },
     });
     return response.data;
   }
 
-  async updateMenuItem(id: number, data: FormData): Promise<MenuItem> {
-    const response = await api.patch<MenuItem>(`/api/menu/items/${id}/`, data, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+  async updateMenuItem(slug: string, data: FormData): Promise<MenuItem> {
+    const response = await api.patch<MenuItem>(`/api/menu/items/${slug}/`, data, {
+      headers: { 'Content-Type': undefined },
     });
     return response.data;
   }
 
-  async deleteMenuItem(id: number): Promise<void> {
-    await api.delete(`/api/menu/items/${id}/`);
+  async deleteMenuItem(slug: string): Promise<void> {
+    await api.delete(`/api/menu/items/${slug}/`);
   }
 
   async createCategory(data: FormData): Promise<Category> {
     const response = await api.post<Category>('/api/menu/categories/', data, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': undefined },
     });
     return response.data;
   }
 
   async updateCategory(slug: string, data: FormData): Promise<Category> {
     const response = await api.patch<Category>(`/api/menu/categories/${slug}/`, data, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': undefined },
     });
     return response.data;
   }

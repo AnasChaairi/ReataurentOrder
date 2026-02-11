@@ -56,6 +56,7 @@ INSTALLED_APPS = [
 
     # Local apps
     'accounts',
+    'restaurants',
     'menu',
     'orders',
     'tables',

@@ -15,7 +15,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from django.db.models import Count, Q
 
-from accounts.permissions import IsAdmin
+from accounts.permissions import IsAdmin, IsAdminOrRestaurantOwner
 from .models import OdooConfig, OdooSyncLog
 from .serializers import (
     OdooConfigSerializer,
@@ -43,10 +43,18 @@ class OdooConfigViewSet(viewsets.ModelViewSet):
 
     queryset = OdooConfig.objects.all()
     serializer_class = OdooConfigSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdminOrRestaurantOwner]
     filter_backends = [OrderingFilter]
     ordering_fields = ['created_at', 'name', 'is_active']
     ordering = ['-is_active', '-created_at']
+
+    def get_queryset(self):
+        queryset = OdooConfig.objects.all()
+        user = self.request.user
+        if user.is_authenticated and user.role == 'RESTAURANT_OWNER' and hasattr(user, 'restaurant_id') and user.restaurant_id:
+            # RESTAURANT_OWNER sees only their restaurant's config
+            queryset = queryset.filter(restaurant__id=user.restaurant_id)
+        return queryset
 
     def get_serializer_class(self):
         """Use minimal serializer for list view"""

@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from accounts.permissions import IsAdmin, IsAdminOrWaiter, IsCustomer
 from accounts.throttles import OrderCreateRateThrottle
+from restaurants.mixins import RestaurantScopedMixin
 from notifications.services import notify_order_created, notify_order_status_change, notify_order_cancelled
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ from .serializers import (
 from .filters import OrderFilter
 
 
-class OrderViewSet(viewsets.ModelViewSet):
+class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     """ViewSet for Order management"""
     queryset = Order.objects.select_related('table', 'customer', 'waiter', 'session').prefetch_related('items')
     serializer_class = OrderSerializer
@@ -50,11 +51,12 @@ class OrderViewSet(viewsets.ModelViewSet):
             'table', 'customer', 'waiter', 'session'
         ).prefetch_related('items__addons')
 
+        # Apply restaurant scoping
+        queryset = self.get_restaurant_queryset(queryset)
+
         if user.role == 'CUSTOMER':
-            # Customers see only their orders
             queryset = queryset.filter(customer=user)
         elif user.role == 'WAITER':
-            # Waiters see orders for their assigned tables
             queryset = queryset.filter(waiter=user)
 
         return queryset
@@ -78,10 +80,10 @@ class OrderViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
 
-        # Sync to Odoo synchronously
+        # Sync to Odoo synchronously — use restaurant's config
         try:
-            from odoo_integration.django_services import OdooConnectionService, OdooOrderSyncService
-            config = OdooConnectionService.get_active_config()
+            from odoo_integration.django_services import OdooOrderSyncService
+            config = getattr(order.restaurant, 'odoo_config', None) if order.restaurant else None
             if config and config.auto_sync_orders:
                 service = OdooOrderSyncService(config)
                 service.sync_order_to_odoo(order)
@@ -353,12 +355,12 @@ class OrderViewSet(viewsets.ModelViewSet):
         order = self.get_object()
 
         try:
-            from odoo_integration.django_services import OdooConnectionService, OdooOrderSyncService
-            config = OdooConnectionService.get_active_config()
+            from odoo_integration.django_services import OdooOrderSyncService
+            config = getattr(order.restaurant, 'odoo_config', None) if order.restaurant else None
 
             if not config:
                 return Response({
-                    'error': 'No active Odoo configuration found'
+                    'error': 'No Odoo configuration found for this restaurant'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             service = OdooOrderSyncService(config)

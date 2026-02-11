@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { menuService, MenuItem, MenuItemListItem, Category } from "@/services/menu.service";
 import { Button } from "@/components/ui/Button";
 
@@ -102,7 +101,7 @@ export default function MenuItemsManagement() {
       }
 
       if (editingItem) {
-        await menuService.updateMenuItem(editingItem.id, formDataToSend);
+        await menuService.updateMenuItem(editingItem.slug, formDataToSend);
       } else {
         await menuService.createMenuItem(formDataToSend);
       }
@@ -115,11 +114,11 @@ export default function MenuItemsManagement() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (slug: string) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
 
     try {
-      await menuService.deleteMenuItem(id);
+      await menuService.deleteMenuItem(slug);
       await fetchData();
     } catch (error) {
       console.error("Error deleting item:", error);
@@ -176,13 +175,12 @@ export default function MenuItemsManagement() {
             {menuItems.map((item) => (
               <tr key={item.id}>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="h-16 w-16 relative rounded-lg overflow-hidden bg-gray-100">
+                  <div className="h-16 w-16 rounded-lg overflow-hidden bg-gray-100">
                     {item.image && (
-                      <Image
+                      <img
                         src={item.image}
                         alt={item.name}
-                        fill
-                        className="object-cover"
+                        className="h-full w-full object-cover"
                       />
                     )}
                   </div>
@@ -216,7 +214,7 @@ export default function MenuItemsManagement() {
                     Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(item.id)}
+                    onClick={() => handleDelete(item.slug)}
                     className="text-red-600 hover:text-red-900"
                   >
                     Delete
@@ -244,12 +242,11 @@ export default function MenuItemsManagement() {
                 </label>
                 <div className="flex items-center space-x-4">
                   {imagePreview && (
-                    <div className="h-32 w-32 relative rounded-lg overflow-hidden">
-                      <Image
+                    <div className="h-32 w-32 rounded-lg overflow-hidden">
+                      <img
                         src={imagePreview}
                         alt="Preview"
-                        fill
-                        className="object-cover"
+                        className="h-full w-full object-cover"
                       />
                     </div>
                   )}
