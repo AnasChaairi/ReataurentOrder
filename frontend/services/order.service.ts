@@ -13,6 +13,7 @@ class OrderService {
         menu_item: cartItem.menuItem.id,
         variant: cartItem.variant?.id,
         addons: cartItem.addons.map((addon) => addon.addon.id),
+        combo_selections: cartItem.combo_selections,
         quantity: cartItem.quantity,
         special_instructions: cartItem.special_instructions,
       })),

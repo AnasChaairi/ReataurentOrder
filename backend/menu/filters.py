@@ -28,11 +28,12 @@ class MenuItemFilter(django_filters.FilterSet):
     # Availability filters
     is_available = django_filters.BooleanFilter()
     is_featured = django_filters.BooleanFilter()
+    is_combo = django_filters.BooleanFilter()
 
     class Meta:
         model = MenuItem
         fields = [
             'category', 'category_slug',
             'is_vegetarian', 'is_vegan', 'is_gluten_free',
-            'is_available', 'is_featured'
+            'is_available', 'is_featured', 'is_combo'
         ]

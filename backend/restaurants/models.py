@@ -16,12 +16,12 @@ class Restaurant(models.Model):
         related_name='owned_restaurants',
         help_text="Restaurant owner account"
     )
-    odoo_config = models.OneToOneField(
+    odoo_config = models.ForeignKey(
         'odoo_integration.OdooConfig',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='restaurant',
+        related_name='restaurants',
         help_text="Odoo POS configuration for this restaurant"
     )
 

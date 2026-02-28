@@ -57,6 +57,21 @@ export interface MenuItemReview {
   updated_at: string;
 }
 
+export interface ComboChoice {
+  id: number;
+  label: string;
+  price_extra: number;
+  choice_item_id: number | null;
+  choice_item_slug: string | null;
+  choice_item_image: string | null;
+  odoo_combo_id: number | null;
+}
+
+export interface ComboGroup {
+  combo_id: number;
+  choices: ComboChoice[];
+}
+
 export interface MenuItem {
   id: number;
   category: number;
@@ -76,6 +91,8 @@ export interface MenuItem {
   calories?: number;
   is_available: boolean;
   is_featured: boolean;
+  is_combo: boolean;
+  combo_groups: ComboGroup[];
   variants: MenuItemVariant[];
   available_addons: MenuItemAddon[];
   images: MenuItemImage[];
@@ -100,6 +117,7 @@ export interface MenuItemListItem {
   preparation_time: number;
   is_available: boolean;
   is_featured: boolean;
+  is_combo: boolean;
   has_variants: boolean;
   average_rating: number;
   review_count: number;

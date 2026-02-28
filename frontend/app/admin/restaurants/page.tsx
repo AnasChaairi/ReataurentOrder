@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useRouter } from "next/navigation";
 import { restaurantService } from "@/services/restaurant.service";
@@ -354,9 +354,8 @@ export default function RestaurantsPage() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {restaurants.map((restaurant) => (
-              <>
+              <React.Fragment key={restaurant.id}>
                 <tr
-                  key={restaurant.id}
                   className={`cursor-pointer hover:bg-gray-50 ${
                     expandedId === restaurant.id ? "bg-gray-50" : ""
                   }`}
@@ -406,7 +405,7 @@ export default function RestaurantsPage() {
 
                 {/* Expanded Detail Panel */}
                 {expandedId === restaurant.id && expandedDetail && (
-                  <tr key={`${restaurant.id}-detail`}>
+                  <tr>
                     <td colSpan={5} className="px-6 py-6 bg-gray-50">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Owner Assignment */}
@@ -567,7 +566,7 @@ export default function RestaurantsPage() {
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             ))}
             {restaurants.length === 0 && (
               <tr>

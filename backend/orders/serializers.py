@@ -24,7 +24,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'menu_item', 'variant', 'item_name', 'base_price',
             'variant_price', 'addons_price', 'unit_price', 'quantity',
-            'total_price', 'special_instructions', 'addons', 'variant_name'
+            'total_price', 'special_instructions', 'combo_selections',
+            'addons', 'variant_name'
         ]
         read_only_fields = [
             'item_name', 'base_price', 'variant_price', 'addons_price',
@@ -47,6 +48,11 @@ class OrderItemCreateSerializer(serializers.Serializer):
     )
     quantity = serializers.IntegerField(min_value=1, default=1)
     special_instructions = serializers.CharField(required=False, allow_blank=True)
+    combo_selections = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        default=list
+    )
 
     def validate(self, data):
         """Validate menu item availability"""
@@ -171,6 +177,7 @@ class OrderCreateSerializer(serializers.Serializer):
                 addons = item_data.get('addons', [])
                 quantity = item_data.get('quantity', 1)
                 instructions = item_data.get('special_instructions', '')
+                combo_selections = item_data.get('combo_selections', [])
 
                 # Calculate addons price
                 addons_price = sum(addon.price for addon in addons)
@@ -182,7 +189,8 @@ class OrderCreateSerializer(serializers.Serializer):
                     variant=variant,
                     addons_price=addons_price,
                     quantity=quantity,
-                    special_instructions=instructions
+                    special_instructions=instructions,
+                    combo_selections=combo_selections,
                 )
 
                 # Create addon entries

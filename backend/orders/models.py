@@ -286,6 +286,14 @@ class OrderItem(models.Model):
         help_text="Unit price × quantity"
     )
 
+    # Combo selections (for combo products)
+    # Stores list of: {combo_id, combo_line_id, product_id, label, price_extra}
+    combo_selections = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Selected combo choices for this item"
+    )
+
     # Special instructions
     special_instructions = models.TextField(
         blank=True,

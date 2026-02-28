@@ -76,17 +76,18 @@ class MenuService {
   }
 
   async getRecommendedItems(slug: string): Promise<MenuItemListItem[]> {
-    const response = await api.get<MenuItemListItem[]>(`/api/menu/items/${slug}/recommended/`);
+    // silent: true — these are optional background fetches; don't toast on error
+    const response = await api.get<MenuItemListItem[]>(`/api/menu/items/${slug}/recommended/`, { silent: true });
     return response.data;
   }
 
   async getPopularItems(): Promise<MenuItemListItem[]> {
-    const response = await api.get<MenuItemListItem[]>('/api/menu/items/popular/');
+    const response = await api.get<MenuItemListItem[]>('/api/menu/items/popular/', { silent: true });
     return response.data;
   }
 
   async getFeaturedItems(): Promise<MenuItemListItem[]> {
-    const response = await api.get<MenuItemListItem[]>('/api/menu/items/featured/');
+    const response = await api.get<MenuItemListItem[]>('/api/menu/items/featured/', { silent: true });
     return response.data;
   }
 

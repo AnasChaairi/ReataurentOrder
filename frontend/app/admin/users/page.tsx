@@ -21,6 +21,7 @@ interface UserItem {
 const ROLES = [
   { value: "ADMIN", label: "Admin", color: "bg-purple-100 text-purple-800" },
   { value: "RESTAURANT_OWNER", label: "Restaurant Owner", color: "bg-blue-100 text-blue-800" },
+  { value: "WAITER", label: "Waiter", color: "bg-orange-100 text-orange-800" },
   { value: "CUSTOMER", label: "Customer", color: "bg-gray-100 text-gray-800" },
 ];
 
@@ -116,10 +117,18 @@ export default function UsersManagement() {
     setFormErrors({});
 
     try {
-      const payload: Record<string, unknown> = { ...form };
-      if (formRestaurant) {
-        payload.restaurant = Number(formRestaurant);
-      }
+      const payload: Record<string, unknown> = {
+        email: form.email,
+        password: form.password,
+        role: form.role,
+        is_active: form.is_active,
+      };
+      // Only include optional fields when they have a value
+      if (form.first_name.trim()) payload.first_name = form.first_name.trim();
+      if (form.last_name.trim()) payload.last_name = form.last_name.trim();
+      if (form.phone_number.trim()) payload.phone_number = form.phone_number.trim();
+      if (formRestaurant) payload.restaurant = Number(formRestaurant);
+
       await api.post("/api/auth/admin/users/", payload);
       resetForm();
       setShowCreate(false);
@@ -299,7 +308,7 @@ export default function UsersManagement() {
                 ))}
               </select>
             </div>
-            {form.role === "RESTAURANT_OWNER" && (
+            {(form.role === "RESTAURANT_OWNER" || form.role === "WAITER") && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Restaurant

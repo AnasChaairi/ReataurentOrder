@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Search, X, Layers } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CategoryTabs } from "@/components/ui/CategoryTabs";
@@ -10,7 +11,6 @@ import MenuItemDetailModal from "@/components/ui/MenuItemDetailModal";
 import { menuService } from "@/services/menu.service";
 import { Category, MenuItemListItem, MenuItem } from "@/types/menu.types";
 import { useCart } from "@/contexts/CartContext";
-import { errorHandler } from "@/lib/errorHandler";
 
 export default function MenuPage() {
   const { addToCart, toggleCart, isCartOpen } = useCart();
@@ -21,11 +21,31 @@ export default function MenuPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showCombosOnly, setShowCombosOnly] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal state
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoadingItem, setIsLoadingItem] = useState(false);
+
+  // Debounce search input — wait 350ms after user stops typing
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setCurrentPage(1); // reset to page 1 on new search
+    }, 350);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setDebouncedSearch("");
+    setCurrentPage(1);
+  };
 
   // Fetch categories
   useEffect(() => {
@@ -38,8 +58,9 @@ export default function MenuPage() {
           setCategories(data.filter(cat => cat.is_active));
         }
       } catch (err: any) {
+        // Silently ignore — the api interceptor already handles network/auth toasts
         if (!abortController.signal.aborted && err.name !== 'AbortError') {
-          errorHandler.error('Failed to fetch categories', err as Error, { component: 'MenuPage' });
+          console.error('Failed to fetch categories', err);
         }
       }
     };
@@ -67,6 +88,14 @@ export default function MenuPage() {
           params.category = activeCategory;
         }
 
+        if (debouncedSearch.trim()) {
+          params.search = debouncedSearch.trim();
+        }
+
+        if (showCombosOnly) {
+          params.is_combo = true;
+        }
+
         const response = await menuService.getMenuItems(params);
 
         if (!abortController.signal.aborted) {
@@ -78,11 +107,7 @@ export default function MenuPage() {
         }
       } catch (err: any) {
         if (!abortController.signal.aborted && err.name !== 'AbortError') {
-          errorHandler.error('Failed to fetch menu items', err as Error, {
-            component: 'MenuPage',
-            page: currentPage,
-            category: activeCategory
-          });
+          console.error('Failed to fetch menu items', err);
           setError('Failed to load menu items. Please try again.');
           setMenuItems([]);
           setTotalPages(1);
@@ -97,11 +122,11 @@ export default function MenuPage() {
     fetchMenuItems();
 
     return () => abortController.abort();
-  }, [activeCategory, currentPage]);
+  }, [activeCategory, currentPage, debouncedSearch, showCombosOnly]);
 
   const handleCategoryChange = (categoryId: number | null) => {
     setActiveCategory(categoryId);
-    setCurrentPage(1); // Reset to first page when changing category
+    setCurrentPage(1);
   };
 
   const handlePageChange = (page: number) => {
@@ -114,8 +139,8 @@ export default function MenuPage() {
     const listItem = menuItems.find(item => item.id === itemId);
     if (!listItem) return;
 
-    // If item has variants, open the detail modal so user can choose
-    if (listItem.has_variants) {
+    // If item has variants or is a combo, open the detail modal so user can choose
+    if (listItem.has_variants || listItem.is_combo) {
       handleItemClick(listItem);
       return;
     }
@@ -141,6 +166,8 @@ export default function MenuPage() {
         preparation_time: listItem.preparation_time,
         is_available: listItem.is_available,
         is_featured: listItem.is_featured,
+        is_combo: listItem.is_combo,
+        combo_groups: [],
         variants: [],
         available_addons: [],
         images: [],
@@ -188,18 +215,57 @@ export default function MenuPage() {
     <div className="min-h-screen bg-white">
       <Header />
 
-      {/* Hero Section */}
-      <section className="relative section-dark text-white py-32 pt-40">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight">
-            EXPLORE OUR MENU
-          </h1>
-          <p className="text-gray-300 max-w-3xl mx-auto text-lg leading-relaxed">
-            From rich espresso blends to hearty dishes and indulgent desserts,
-            BARISTAS brings the café experience to your doorstep.
-          </p>
-        </div>
-      </section>
+      {/* Main content landmark */}
+      <main id="main-content">
+        {/* Hero Section */}
+        <section className="relative text-white py-32 pt-44 overflow-hidden">
+          {/* Background */}
+          <div className="absolute inset-0 z-0">
+            <img
+              src="/baristas-background.png"
+              alt=""
+              aria-hidden="true"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-baristas-brown-dark/85 via-baristas-brown-dark/70 to-baristas-brown-dark/90" />
+          </div>
+          <div className="relative z-10 container mx-auto px-6 text-center">
+            <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-baristas-cream px-4 py-2 rounded-full text-sm font-medium mb-6 backdrop-blur-sm">
+              Fresh &amp; Crafted Daily
+            </div>
+            <h1 className="text-5xl md:text-7xl font-extrabold mb-6 tracking-tight">
+              EXPLORE OUR MENU
+            </h1>
+            <p className="text-white/65 max-w-2xl mx-auto text-lg leading-relaxed">
+              From rich espresso blends to hearty dishes and indulgent desserts,
+              BARISTAS brings the café experience to your doorstep.
+            </p>
+
+            {/* Search bar */}
+            <div className="mt-10 max-w-xl mx-auto">
+              <div className="relative flex items-center">
+                <Search className="absolute left-4 w-5 h-5 text-white/50 pointer-events-none" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search items, ingredients..."
+                  className="w-full pl-12 pr-12 py-4 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 text-white placeholder-white/45 focus:outline-none focus:ring-2 focus:ring-white/40 focus:bg-white/20 transition-all text-base"
+                  aria-label="Search menu items"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-4 text-white/50 hover:text-white transition-colors"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
 
       {/* Menu Content */}
       <section className="py-16 section-light">
@@ -211,21 +277,58 @@ export default function MenuPage() {
             onCategoryChange={handleCategoryChange}
           />
 
+          {/* Filter bar */}
+          <div className="flex items-center gap-3 mb-6 flex-wrap">
+            <button
+              onClick={() => { setShowCombosOnly(!showCombosOnly); setCurrentPage(1); }}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all ${
+                showCombosOnly
+                  ? "bg-baristas-brown-dark text-white border-baristas-brown-dark shadow-sm"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-baristas-brown hover:text-baristas-brown"
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              Combos
+              {showCombosOnly && <X className="w-3 h-3 ml-1" />}
+            </button>
+          </div>
+
+          {/* Active search indicator */}
+          {debouncedSearch && (
+            <div className="flex items-center gap-2 mb-6 text-sm text-gray-600">
+              <Search className="w-4 h-4 text-gray-400" />
+              <span>
+                Results for <span className="font-semibold text-gray-900">&ldquo;{debouncedSearch}&rdquo;</span>
+              </span>
+              <button
+                onClick={clearSearch}
+                className="ml-2 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
+            </div>
+          )}
+
           {/* Loading State */}
           {isLoading && (
-            <div className="text-center py-20">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#4A3428] border-t-transparent"></div>
+            <div className="text-center py-20" role="status" aria-live="polite" aria-atomic="true">
+              <div
+                className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#4A3428] border-t-transparent"
+                aria-hidden="true"
+              ></div>
               <p className="mt-4 text-gray-700">Loading menu items...</p>
             </div>
           )}
 
           {/* Error State */}
           {error && !isLoading && (
-            <div className="text-center py-20">
+            <div className="text-center py-20" role="alert" aria-live="assertive">
               <p className="text-red-600 mb-4">{error}</p>
               <button
                 onClick={() => { setError(null); setCurrentPage(1); }}
                 className="mt-2 px-6 py-3 bg-[#4A3428] text-white rounded-xl font-semibold hover:bg-[#3B2316] transition-colors"
+                aria-label="Retry loading menu items"
               >
                 Retry
               </button>
@@ -260,11 +363,28 @@ export default function MenuPage() {
           {/* Empty State */}
           {!isLoading && menuItems.length === 0 && !error && (
             <div className="text-center py-20">
-              <p className="text-gray-700 text-lg">No items found in this category.</p>
+              {debouncedSearch ? (
+                <>
+                  <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-700 text-lg font-medium mb-2">
+                    No results for &ldquo;{debouncedSearch}&rdquo;
+                  </p>
+                  <p className="text-gray-400 text-sm mb-6">Try a different keyword or browse by category.</p>
+                  <button
+                    onClick={clearSearch}
+                    className="px-6 py-2.5 bg-[#4A3428] text-white rounded-xl font-semibold hover:bg-[#3B2316] transition-colors text-sm"
+                  >
+                    Clear search
+                  </button>
+                </>
+              ) : (
+                <p className="text-gray-700 text-lg">No items found in this category.</p>
+              )}
             </div>
           )}
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <Footer />

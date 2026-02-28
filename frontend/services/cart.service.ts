@@ -86,9 +86,13 @@ class CartService {
       .map((a) => `${a.addon.id}x${a.quantity}`)
       .sort()
       .join('-');
+    const comboIds = (item.combo_selections ?? [])
+      .map((c) => `${c.combo_id}:${c.combo_line_id}`)
+      .sort()
+      .join('-');
     const instructions = item.special_instructions || 'no-instructions';
 
-    return `${item.menuItem.id}-${variantId}-${addonIds}-${instructions}`;
+    return `${item.menuItem.id}-${variantId}-${addonIds}-${comboIds}-${instructions}`;
   }
 
   /**

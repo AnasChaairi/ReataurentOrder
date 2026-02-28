@@ -285,11 +285,17 @@ class OdooOrderSyncService:
                     f"Menu item '{item.menu_item.name}' is not synced from Odoo (missing odoo_product_id)"
                 )
 
-            order_lines.append({
+            line = {
                 'product_id': item.menu_item.odoo_product_id,
                 'qty': float(item.quantity),
                 'price_unit': float(item.unit_price),
-            })
+            }
+
+            # Attach combo selections so create_pos_order can build child lines
+            if item.combo_selections:
+                line['combo_selections'] = item.combo_selections
+
+            order_lines.append(line)
 
         # Note: Payments can be added later if needed
         # For now, we create orders without immediate payment
@@ -315,11 +321,16 @@ class OdooMenuSyncService:
         self.config = config
         self.client = OdooConnectionService.get_client(config)
         self.product_service = ProductService(self.client)
+        self.pos_service = POSService(self.client)
 
     @transaction.atomic
     def sync_menu_from_odoo(self, user=None, restaurant=None) -> Dict:
         """
         Pull products from Odoo and update Django menu.
+
+        When a POS config is selected (config.pos_config_id), only products
+        belonging to that specific POS configuration are synced. Otherwise
+        falls back to all available_in_pos products.
 
         Returns:
             Dict with sync statistics:
@@ -349,19 +360,52 @@ class OdooMenuSyncService:
                 'items_updated': 0,
             }
 
-            # Fetch all products from Odoo
-            logger.info("Fetching products from Odoo...")
-            products = self.product_service.get_all_products(
-                fields=['id', 'name', 'list_price', 'categ_id', 'type', 'available_in_pos']
-            )
+            # Fetch products scoped to the selected POS config (if set)
+            pos_config_id = self.config.pos_config_id
+            if pos_config_id:
+                logger.info(
+                    f"Fetching products for POS config {pos_config_id} "
+                    f"({self.config.pos_config_name or pos_config_id}) from Odoo..."
+                )
+                pos_products = self.pos_service.get_pos_products(
+                    pos_config_id,
+                    fields=['id', 'name', 'list_price', 'categ_id', 'type', 'available_in_pos'],
+                )
+                logger.info(
+                    f"Found {len(pos_products)} products in POS config "
+                    f"'{self.config.pos_config_name or pos_config_id}'"
+                )
+            else:
+                # No POS config selected — fall back to all available_in_pos products
+                logger.info(
+                    "No POS config selected. Fetching all available_in_pos products from Odoo..."
+                )
+                products = self.product_service.get_all_products(
+                    fields=['id', 'name', 'list_price', 'categ_id', 'type', 'available_in_pos']
+                )
+                pos_products = [p for p in products if p.get('available_in_pos', False)]
+                logger.info(f"Found {len(pos_products)} POS-available products in Odoo")
 
-            # Filter only POS-available products
-            pos_products = [p for p in products if p.get('available_in_pos', False)]
-            logger.info(f"Found {len(pos_products)} POS-available products in Odoo")
+            # Fetch combo products (Odoo 17 pos.combo) when POS config is set
+            combo_products = []
+            if pos_config_id:
+                try:
+                    combo_products = self.pos_service.get_combo_products(pos_config_id)
+                    logger.info(f"Found {len(combo_products)} combo products in Odoo")
+                except Exception as e:
+                    logger.warning(f"Could not fetch combo products (may not be supported): {e}")
 
-            # Step 1: Sync categories
+            stats['combos_created'] = 0
+            stats['combos_updated'] = 0
+
+            # Merge combo products into pos_products list for category syncing
+            all_products = list(pos_products) + [
+                p for p in combo_products if not p.get('is_combo') is False
+            ]
+
+            # Step 1: Sync categories (from regular + combo products)
             category_map = {}  # Map Odoo category ID -> Django Category
-            for product in pos_products:
+            for product in all_products:
                 if product.get('categ_id'):
                     odoo_cat_id = product['categ_id'][0]  # [id, 'name']
                     odoo_cat_name = product['categ_id'][1]
@@ -437,9 +481,88 @@ class OdooMenuSyncService:
                 else:
                     stats['items_updated'] += 1
 
+            # Step 3: Sync combo products
+            if combo_products:
+                from menu.models import MenuItemComboChoice
+
+                # Build a map of odoo_product_id -> Django MenuItem for resolving choice_item
+                odoo_id_to_item: Dict[int, object] = {}
+                qs = MenuItem.objects.filter(odoo_product_id__isnull=False)
+                if restaurant:
+                    qs = qs.filter(restaurant=restaurant)
+                for mi in qs.only('id', 'odoo_product_id'):
+                    odoo_id_to_item[mi.odoo_product_id] = mi
+
+                for combo_product in combo_products:
+                    odoo_product_id = combo_product['id']
+                    odoo_cat_id = combo_product.get('categ_id', [None])[0]
+
+                    category = category_map.get(odoo_cat_id)
+                    if not category:
+                        cat_lookup = {'name': 'Uncategorized'}
+                        cat_defaults = {'odoo_last_synced': timezone.now()}
+                        if restaurant:
+                            cat_lookup['restaurant'] = restaurant
+                            cat_defaults['restaurant'] = restaurant
+                        category, _ = Category.objects.get_or_create(
+                            **cat_lookup,
+                            defaults=cat_defaults,
+                        )
+
+                    defaults = {
+                        'name': combo_product['name'],
+                        'price': Decimal(str(combo_product.get('list_price', 0))),
+                        'category': category,
+                        'is_available': combo_product.get('available_in_pos', True),
+                        'is_combo': True,
+                        'odoo_last_synced': timezone.now(),
+                    }
+                    if restaurant:
+                        defaults['restaurant'] = restaurant
+
+                    lookup = {'odoo_product_id': odoo_product_id}
+                    if restaurant:
+                        lookup['restaurant'] = restaurant
+
+                    combo_item, created = MenuItem.objects.update_or_create(
+                        **lookup,
+                        defaults=defaults,
+                    )
+
+                    if created and not combo_item.description:
+                        combo_item.description = f"Combo synced from Odoo: {combo_product['name']}"
+                        combo_item.save(update_fields=['description'])
+
+                    # Sync combo choices — replace all existing choices for this item
+                    MenuItemComboChoice.objects.filter(menu_item=combo_item).delete()
+
+                    for combo in combo_product.get('combos', []):
+                        for line in combo.get('lines', []):
+                            choice_odoo_id = line.get('product_id')
+                            choice_item = odoo_id_to_item.get(choice_odoo_id) if choice_odoo_id else None
+
+                            MenuItemComboChoice.objects.create(
+                                menu_item=combo_item,
+                                choice_item=choice_item,
+                                label=line.get('product_name', f"Product {choice_odoo_id}"),
+                                price_extra=Decimal(str(line.get('price_extra', 0.0))),
+                                odoo_combo_id=combo.get('combo_id'),
+                                odoo_combo_line_id=line.get('combo_line_id'),
+                            )
+
+                    if created:
+                        stats['combos_created'] += 1
+                    else:
+                        stats['combos_updated'] += 1
+
+                logger.info(
+                    f"Combo sync: {stats['combos_created']} created, "
+                    f"{stats['combos_updated']} updated"
+                )
+
             # Mark sync log as SUCCESS
             sync_log.mark_success(
-                odoo_id=len(pos_products),
+                odoo_id=len(pos_products) + len(combo_products),
                 response_data=stats
             )
 

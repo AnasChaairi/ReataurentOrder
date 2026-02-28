@@ -145,6 +145,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Create new user."""
+        from django.conf import settings
+        from restaurants.models import Restaurant
+
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
 
@@ -152,6 +155,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             password=password,
             **validated_data
         )
+
+        # Auto-assign default restaurant to new customers
+        default_id = getattr(settings, 'DEFAULT_CUSTOMER_RESTAURANT_ID', None)
+        if default_id and not user.restaurant_id:
+            try:
+                user.restaurant = Restaurant.objects.get(id=default_id)
+                user.save(update_fields=['restaurant'])
+            except Restaurant.DoesNotExist:
+                pass
+
         return user
 
 

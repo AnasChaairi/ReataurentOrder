@@ -1,38 +1,33 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { authService, User } from '@/services/auth.service';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useAdmin() {
   const router = useRouter();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const currentUser = await authService.checkAuthStatus();
+    if (isLoading) return;
 
-      if (!currentUser) {
-        router.push('/auth/login');
-        return;
-      }
+    if (!user) {
+      // Not logged in — send to login page, replace history so back button doesn't loop
+      router.replace('/auth/login');
+      return;
+    }
 
-      if (currentUser.role !== 'ADMIN' && currentUser.role !== 'RESTAURANT_OWNER') {
-        router.push('/');
-        return;
-      }
+    if (user.role !== 'ADMIN' && user.role !== 'RESTAURANT_OWNER' && user.role !== 'WAITER') {
+      // Logged in but not staff — send home
+      router.replace('/');
+    }
+  }, [user, isLoading, router]);
 
-      setUser(currentUser);
-      setIsAdmin(currentUser.role === 'ADMIN');
-      setIsOwner(currentUser.role === 'RESTAURANT_OWNER');
-      setIsLoading(false);
-    };
-
-    checkAdmin();
-  }, [router]);
-
-  return { isAdmin, isOwner, user, isLoading };
+  return {
+    isAdmin: user?.role === 'ADMIN',
+    isOwner: user?.role === 'RESTAURANT_OWNER',
+    isWaiter: user?.role === 'WAITER',
+    user,
+    isLoading,
+  };
 }

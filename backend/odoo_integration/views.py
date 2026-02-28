@@ -53,7 +53,7 @@ class OdooConfigViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_authenticated and user.role == 'RESTAURANT_OWNER' and hasattr(user, 'restaurant_id') and user.restaurant_id:
             # RESTAURANT_OWNER sees only their restaurant's config
-            queryset = queryset.filter(restaurant__id=user.restaurant_id)
+            queryset = queryset.filter(restaurants__id=user.restaurant_id)
         return queryset
 
     def get_serializer_class(self):
@@ -207,10 +207,18 @@ class OdooConfigViewSet(viewsets.ModelViewSet):
             from .django_services import OdooMenuSyncService
 
             service = OdooMenuSyncService(config)
-            result = service.sync_menu_from_odoo(user=request.user)
+            # Pass the first linked restaurant so category/item lookups are scoped
+            restaurant = config.restaurants.first()
+            result = service.sync_menu_from_odoo(user=request.user, restaurant=restaurant)
 
             logger.info(f"Menu sync completed: {result}")
 
+            combos_msg = ""
+            if result.get('combos_created', 0) or result.get('combos_updated', 0):
+                combos_msg = (
+                    f", {result.get('combos_created', 0)} combos created, "
+                    f"{result.get('combos_updated', 0)} updated"
+                )
             return Response({
                 'status': 'success',
                 'message': (
@@ -218,7 +226,8 @@ class OdooConfigViewSet(viewsets.ModelViewSet):
                     f"{result.get('categories_created', 0)} categories created, "
                     f"{result.get('categories_updated', 0)} updated, "
                     f"{result.get('items_created', 0)} items created, "
-                    f"{result.get('items_updated', 0)} updated."
+                    f"{result.get('items_updated', 0)} updated"
+                    f"{combos_msg}."
                 ),
                 **result
             }, status=status.HTTP_200_OK)

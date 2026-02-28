@@ -8,29 +8,29 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAdmin, isOwner, isLoading } = useAdmin();
+  const { isAdmin, isOwner, isWaiter, isLoading } = useAdmin();
 
+  // Loading — wait for auth check
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#E5D4C1]">
+      <div className="min-h-screen flex items-center justify-center bg-baristas-cream">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#4A3428] border-t-transparent mb-4"></div>
-          <p className="text-gray-700">Loading admin panel...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-baristas-brown-dark border-t-transparent mb-4" />
+          <p className="text-baristas-brown font-medium">Loading…</p>
         </div>
       </div>
     );
   }
 
-  if (!isAdmin && !isOwner) {
+  // Not authorized — useAdmin already redirected, render nothing while navigation happens
+  if (!isAdmin && !isOwner && !isWaiter) {
     return null;
   }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar />
-      <main className="flex-1 p-8">
-        {children}
-      </main>
+      <main className="flex-1 p-8">{children}</main>
     </div>
   );
 }

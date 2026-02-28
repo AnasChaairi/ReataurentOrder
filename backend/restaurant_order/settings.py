@@ -327,6 +327,9 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# Default restaurant assigned to new customer accounts (set via env var)
+DEFAULT_CUSTOMER_RESTAURANT_ID = int(os.getenv('DEFAULT_CUSTOMER_RESTAURANT_ID', 2))
+
 # API Documentation
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Restaurant Order API',

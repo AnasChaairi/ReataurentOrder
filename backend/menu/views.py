@@ -55,11 +55,28 @@ class CategoryViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         # Apply restaurant scoping for authenticated users
         queryset = self.get_restaurant_queryset(queryset)
 
-        # Non-admin users only see active categories
+        # Non-admin users only see active categories with a restaurant
         if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
-            queryset = queryset.filter(is_active=True)
+            queryset = queryset.filter(is_active=True, restaurant__isnull=False)
 
         return queryset
+
+    def get_object(self):
+        """Override to handle slug collisions across restaurants."""
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+
+        try:
+            obj = queryset.get(**filter_kwargs)
+        except Category.MultipleObjectsReturned:
+            obj = queryset.filter(**filter_kwargs).first()
+        except Category.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound()
+
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     def get_serializer_class(self):
         """Use simplified serializer for list view"""
@@ -141,14 +158,36 @@ class MenuItemViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         # Apply restaurant scoping for authenticated users
         queryset = self.get_restaurant_queryset(queryset)
 
-        # Non-admin users only see available items in active categories
+        # Non-admin users only see available items in active categories, with a restaurant
         if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(
                 is_available=True,
-                category__is_active=True
+                category__is_active=True,
+                restaurant__isnull=False,
             )
 
         return queryset
+
+    def get_object(self):
+        """
+        Override to handle slug collisions across restaurants.
+        When the same slug exists in multiple restaurants (no restaurant filter
+        in effect), return the first match instead of raising MultipleObjectsReturned.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+
+        try:
+            obj = queryset.get(**filter_kwargs)
+        except MenuItem.MultipleObjectsReturned:
+            obj = queryset.filter(**filter_kwargs).first()
+        except MenuItem.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound()
+
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     def get_serializer_class(self):
         """Use appropriate serializer based on action"""

@@ -115,9 +115,10 @@ def sync_menu_from_odoo():
             logger.info(f"Menu sync is disabled for config {config.name}")
             return {'status': 'skipped', 'reason': 'Menu sync disabled in configuration'}
 
-        # Perform sync
+        # Perform sync (scope to the first linked restaurant)
         service = OdooMenuSyncService(config)
-        result = service.sync_menu_from_odoo(user=None)
+        restaurant = config.restaurants.first()
+        result = service.sync_menu_from_odoo(user=None, restaurant=restaurant)
 
         logger.info(f"Menu sync completed successfully: {result}")
         return {

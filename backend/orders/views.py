@@ -225,6 +225,7 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
                 addons = item_data.get('addons', [])
                 quantity = item_data.get('quantity', 1)
                 instructions = item_data.get('special_instructions', '')
+                combo_selections = item_data.get('combo_selections', [])
 
                 addons_price = sum(addon.price for addon in addons)
 
@@ -234,7 +235,8 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
                     variant=variant,
                     addons_price=addons_price,
                     quantity=quantity,
-                    special_instructions=instructions
+                    special_instructions=instructions,
+                    combo_selections=combo_selections,
                 )
 
                 for addon in addons:

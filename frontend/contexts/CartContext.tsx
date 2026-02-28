@@ -11,13 +11,27 @@ interface CartProviderProps {
   children: ReactNode;
 }
 
+const EMPTY_CART: Cart = {
+  items: [],
+  subtotal: 0,
+  tax: 0,
+  discount: 0,
+  total: 0,
+  item_count: 0,
+};
+
 export function CartProvider({ children }: CartProviderProps) {
-  const [cart, setCart] = useState<Cart>(cartService.getCart());
+  // Always start with an empty cart so SSR and initial client render match.
+  // localStorage is only read inside useEffect (client-only).
+  const [cart, setCart] = useState<Cart>(EMPTY_CART);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Load cart from localStorage on mount
+  // Load cart from localStorage after mount (client-only)
   useEffect(() => {
-    setCart(cartService.getCart());
+    const stored = cartService.getCart();
+    if (stored.items.length > 0) {
+      setCart(stored);
+    }
   }, []);
 
   // Save cart to localStorage whenever it changes

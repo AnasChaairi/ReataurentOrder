@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
@@ -12,12 +12,15 @@ export const metadata: Metadata = {
   title: "Baristas - Restaurant Order Platform",
   description: "Your daily dose of comfort. Brewed, baked, and beautifully served.",
   manifest: "/manifest.json",
-  themeColor: "#3B2316",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Baristas",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#3B2316",
 };
 
 export default function RootLayout({

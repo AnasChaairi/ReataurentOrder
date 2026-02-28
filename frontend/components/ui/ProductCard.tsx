@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { Button } from "./Button";
+import { ShoppingCart, Plus, Minus } from "lucide-react";
 
 interface ProductCardProps {
   name: string;
@@ -24,64 +24,61 @@ export function ProductCard({ name, description, price, image }: ProductCardProp
 
   const handleAddToCart = () => {
     console.log(`Adding ${quantity} x ${name} to cart`);
-    // TODO: Implement cart functionality
   };
 
   return (
-    <div className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow">
-      {/* Product Image */}
-      <div className="relative h-64 bg-black overflow-hidden">
+    <div className="group bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-200 border border-gray-100">
+      {/* Image */}
+      <div className="relative h-60 bg-baristas-cream overflow-hidden">
         <Image
           src={image}
           alt={name}
           fill
-          className="object-cover group-hover:scale-110 transition-transform duration-300"
+          className="object-cover group-hover:scale-105 transition-transform duration-400"
         />
       </div>
 
-      {/* Product Info */}
-      <div className="p-6 bg-baristas-cream">
-        <h3 className="text-lg font-bold text-baristas-brown-dark uppercase mb-2">
+      {/* Info */}
+      <div className="p-5 bg-baristas-cream">
+        <h3 className="text-sm font-bold text-baristas-brown-dark uppercase tracking-wide mb-1.5">
           {name}
         </h3>
-        <p className="text-sm text-gray-700 mb-4 line-clamp-2 min-h-[40px]">
+        <p className="text-xs text-gray-500 mb-4 line-clamp-2 min-h-[32px] leading-relaxed">
           {description}
         </p>
-        <p className="text-2xl font-bold text-baristas-brown-dark mb-4">
+        <p className="text-xl font-extrabold text-baristas-brown-dark mb-4">
           {price}
         </p>
 
-        {/* Quantity and Add to Cart */}
-        <div className="flex items-center justify-between gap-3">
-          {/* Quantity Controls */}
-          <div className="flex items-center bg-white rounded-full px-3 py-1.5 gap-3 border border-gray-300">
+        <div className="flex items-center gap-2">
+          {/* Quantity */}
+          <div className="flex items-center bg-white rounded-full px-2 py-1.5 gap-2 border border-gray-200 shadow-sm">
             <button
               onClick={handleDecrease}
-              className="text-baristas-brown hover:text-baristas-brown-dark font-bold text-lg w-6 h-6 flex items-center justify-center"
+              className="text-baristas-brown hover:text-baristas-brown-dark w-6 h-6 flex items-center justify-center rounded-full hover:bg-baristas-cream transition-colors disabled:opacity-40"
               aria-label="Decrease quantity"
+              disabled={quantity <= 1}
             >
-              −
+              <Minus className="w-3 h-3" />
             </button>
-            <span className="text-baristas-brown-dark font-semibold min-w-[20px] text-center">
+            <span className="text-baristas-brown-dark font-bold min-w-[20px] text-center text-sm">
               {quantity}
             </span>
             <button
               onClick={handleIncrease}
-              className="text-baristas-brown hover:text-baristas-brown-dark font-bold text-lg w-6 h-6 flex items-center justify-center"
+              className="text-baristas-brown hover:text-baristas-brown-dark w-6 h-6 flex items-center justify-center rounded-full hover:bg-baristas-cream transition-colors"
               aria-label="Increase quantity"
             >
-              +
+              <Plus className="w-3 h-3" />
             </button>
           </div>
 
-          {/* Add to Cart Button */}
+          {/* Add to cart */}
           <button
             onClick={handleAddToCart}
-            className="flex-1 bg-baristas-brown text-white px-4 py-2.5 rounded-full font-semibold hover:bg-baristas-brown-light transition-colors text-sm flex items-center justify-center gap-2"
+            className="flex-1 bg-baristas-brown-dark text-white px-4 py-2.5 rounded-full font-semibold hover:bg-baristas-brown transition-colors text-xs flex items-center justify-center gap-1.5 shadow-sm"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
+            <ShoppingCart className="w-3.5 h-3.5" />
             Add to cart
           </button>
         </div>

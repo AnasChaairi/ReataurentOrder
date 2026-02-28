@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Category, MenuItem, MenuItemVariant, MenuItemAddon, MenuItemImage, MenuItemReview
+from .models import Category, MenuItem, MenuItemVariant, MenuItemAddon, MenuItemImage, MenuItemReview, MenuItemComboChoice
 
 
 @admin.register(Category)
@@ -15,6 +15,15 @@ class CategoryAdmin(admin.ModelAdmin):
         """Display count of items in category"""
         return obj.items.count()
     items_count.short_description = 'Items'
+
+
+class MenuItemComboChoiceInline(admin.TabularInline):
+    """Inline admin for combo product choices"""
+    model = MenuItemComboChoice
+    fk_name = 'menu_item'
+    extra = 0
+    fields = ['label', 'choice_item', 'price_extra', 'odoo_combo_id', 'odoo_combo_line_id']
+    readonly_fields = ['odoo_combo_id', 'odoo_combo_line_id']
 
 
 class MenuItemVariantInline(admin.TabularInline):
@@ -53,7 +62,7 @@ class MenuItemAdmin(admin.ModelAdmin):
     ]
     search_fields = ['name', 'description', 'ingredients']
     prepopulated_fields = {'slug': ('name',)}
-    inlines = [MenuItemImageInline, MenuItemVariantInline, MenuItemAddonInline]
+    inlines = [MenuItemImageInline, MenuItemVariantInline, MenuItemAddonInline, MenuItemComboChoiceInline]
     ordering = ['category', 'name']
 
     fieldsets = (
@@ -67,7 +76,7 @@ class MenuItemAdmin(admin.ModelAdmin):
             'fields': ('preparation_time', 'ingredients', 'allergens', 'calories')
         }),
         ('Availability & Features', {
-            'fields': ('is_available', 'is_featured')
+            'fields': ('is_available', 'is_featured', 'is_combo')
         }),
         ('Odoo Integration', {
             'fields': ('odoo_product_id',),
@@ -113,6 +122,15 @@ class MenuItemImageAdmin(admin.ModelAdmin):
     search_fields = ['menu_item__name', 'alt_text']
     ordering = ['menu_item', 'order', '-is_primary']
     list_editable = ['order', 'is_primary']
+
+
+@admin.register(MenuItemComboChoice)
+class MenuItemComboChoiceAdmin(admin.ModelAdmin):
+    """Admin interface for combo product choices"""
+    list_display = ['menu_item', 'label', 'price_extra', 'odoo_combo_id']
+    list_filter = ['menu_item__category']
+    search_fields = ['menu_item__name', 'label']
+    readonly_fields = ['odoo_combo_id', 'odoo_combo_line_id']
 
 
 @admin.register(MenuItemReview)

@@ -95,6 +95,10 @@ class MenuItem(models.Model):
     # Availability
     is_available = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
+    is_combo = models.BooleanField(
+        default=False,
+        help_text="True when this item is an Odoo POS combo product (pos.combo)"
+    )
 
     # Odoo integration
     odoo_product_id = models.IntegerField(blank=True, null=True)
@@ -140,6 +144,57 @@ class MenuItem(models.Model):
     def get_review_count(self):
         """Get total number of reviews"""
         return self.reviews.count()
+
+
+class MenuItemComboChoice(models.Model):
+    """
+    A selectable product choice within a combo menu item.
+
+    Reflects Odoo's pos.combo.line: each record represents one product
+    option the customer can pick from within the combo.
+    """
+    menu_item = models.ForeignKey(
+        MenuItem,
+        on_delete=models.CASCADE,
+        related_name='combo_choices'
+    )
+    # The product offered as a choice in this combo slot
+    choice_item = models.ForeignKey(
+        MenuItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='combo_memberships',
+        help_text="The individual menu item offered as a choice in this combo"
+    )
+    label = models.CharField(
+        max_length=200,
+        help_text="Display name of this choice (from Odoo product name)"
+    )
+    price_extra = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Additional price for selecting this choice"
+    )
+
+    # Odoo Integration
+    odoo_combo_id = models.IntegerField(
+        null=True, blank=True,
+        help_text="Odoo pos.combo ID"
+    )
+    odoo_combo_line_id = models.IntegerField(
+        null=True, blank=True,
+        help_text="Odoo pos.combo.line ID"
+    )
+
+    class Meta:
+        verbose_name = "Combo Choice"
+        verbose_name_plural = "Combo Choices"
+        ordering = ['menu_item', 'label']
+
+    def __str__(self):
+        return f"{self.menu_item.name} → {self.label}"
 
 
 class MenuItemVariant(models.Model):

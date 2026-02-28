@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, MenuItem, MenuItemVariant, MenuItemAddon, MenuItemImage, MenuItemReview
+from .models import Category, MenuItem, MenuItemVariant, MenuItemAddon, MenuItemImage, MenuItemReview, MenuItemComboChoice
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -95,6 +95,27 @@ class MenuItemReviewSerializer(serializers.ModelSerializer):
         return value
 
 
+class ComboChoiceSerializer(serializers.ModelSerializer):
+    """Serializer for a single choice within a combo group"""
+    choice_item_id = serializers.IntegerField(source='choice_item.id', read_only=True, allow_null=True)
+    choice_item_slug = serializers.CharField(source='choice_item.slug', read_only=True, allow_null=True)
+    choice_item_image = serializers.ImageField(source='choice_item.image', read_only=True, allow_null=True)
+
+    class Meta:
+        model = MenuItemComboChoice
+        fields = [
+            'id', 'label', 'price_extra',
+            'choice_item_id', 'choice_item_slug', 'choice_item_image',
+            'odoo_combo_id',
+        ]
+
+
+class ComboGroupSerializer(serializers.Serializer):
+    """Groups combo choices by odoo_combo_id into named choice groups"""
+    combo_id = serializers.IntegerField()
+    choices = ComboChoiceSerializer(many=True)
+
+
 class MenuItemSerializer(serializers.ModelSerializer):
     """Full serializer for MenuItem with all details"""
     category_name = serializers.CharField(source='category.name', read_only=True)
@@ -104,6 +125,7 @@ class MenuItemSerializer(serializers.ModelSerializer):
     images = MenuItemImageSerializer(many=True, read_only=True)
     average_rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
+    combo_groups = serializers.SerializerMethodField()
 
     class Meta:
         model = MenuItem
@@ -112,20 +134,42 @@ class MenuItemSerializer(serializers.ModelSerializer):
             'name', 'slug', 'description', 'price', 'image',
             'is_vegetarian', 'is_vegan', 'is_gluten_free',
             'preparation_time', 'ingredients', 'allergens', 'calories',
-            'is_available', 'is_featured',
-            'variants', 'available_addons', 'images',
+            'is_available', 'is_featured', 'is_combo',
+            'variants', 'available_addons', 'images', 'combo_groups',
             'average_rating', 'review_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['slug', 'created_at', 'updated_at']
 
     def get_average_rating(self, obj):
-        """Get average rating for this menu item"""
         return obj.get_average_rating()
 
     def get_review_count(self, obj):
-        """Get review count for this menu item"""
         return obj.get_review_count()
+
+    def get_combo_groups(self, obj):
+        """
+        Return combo choices grouped by odoo_combo_id so the frontend
+        can render one picker section per group.
+        """
+        if not obj.is_combo:
+            return []
+
+        choices = obj.combo_choices.select_related('choice_item').order_by('odoo_combo_id', 'label')
+        groups: dict = {}
+        for choice in choices:
+            gid = choice.odoo_combo_id or 0
+            if gid not in groups:
+                groups[gid] = []
+            groups[gid].append(choice)
+
+        result = []
+        for combo_id, group_choices in groups.items():
+            result.append({
+                'combo_id': combo_id,
+                'choices': ComboChoiceSerializer(group_choices, many=True, context=self.context).data,
+            })
+        return result
 
 
 class MenuItemListSerializer(serializers.ModelSerializer):
@@ -141,7 +185,7 @@ class MenuItemListSerializer(serializers.ModelSerializer):
             'id', 'category', 'category_name', 'name', 'slug',
             'description', 'price', 'image',
             'is_vegetarian', 'is_vegan', 'is_gluten_free',
-            'preparation_time', 'is_available', 'is_featured',
+            'preparation_time', 'is_available', 'is_featured', 'is_combo',
             'has_variants', 'average_rating', 'review_count'
         ]
 

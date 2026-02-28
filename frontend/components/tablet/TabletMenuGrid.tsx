@@ -107,6 +107,8 @@ export function TabletMenuGrid() {
         preparation_time: listItem.preparation_time,
         is_available: listItem.is_available,
         is_featured: listItem.is_featured,
+        is_combo: listItem.is_combo,
+        combo_groups: [],
         variants: [],
         available_addons: [],
         images: [],

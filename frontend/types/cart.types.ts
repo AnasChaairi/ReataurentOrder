@@ -1,10 +1,18 @@
 // Cart related type definitions
 
-import { MenuItem, MenuItemVariant, MenuItemAddon } from './menu.types';
+import { MenuItem, MenuItemVariant, MenuItemAddon, ComboChoice } from './menu.types';
 
 export interface CartItemAddon {
   addon: MenuItemAddon;
   quantity: number;
+}
+
+export interface CartComboSelection {
+  combo_id: number;          // pos.combo id (group id)
+  combo_line_id: number;     // pos.combo.line id (the specific choice)
+  product_id: number | null; // Odoo product.product id of the chosen item
+  label: string;             // Display name of the choice
+  price_extra: number;       // Extra price for this choice
 }
 
 export interface CartItem {
@@ -12,6 +20,7 @@ export interface CartItem {
   menuItem: MenuItem;
   variant?: MenuItemVariant;
   addons: CartItemAddon[];
+  combo_selections?: CartComboSelection[];
   quantity: number;
   special_instructions?: string;
   unit_price: number; // Base price + variant + addons

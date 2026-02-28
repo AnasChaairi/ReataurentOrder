@@ -28,7 +28,7 @@ class RestaurantScopedMixin:
         if user.role == User.Role.ADMIN:
             return queryset
 
-        # RESTAURANT_OWNER and staff see only their restaurant
+        # RESTAURANT_OWNER, staff, and CUSTOMER see only their restaurant
         if hasattr(user, 'restaurant_id') and user.restaurant_id:
             return queryset.filter(restaurant_id=user.restaurant_id)
 

@@ -34,12 +34,12 @@ export default function CheckoutPage() {
     }
   }, [cart, router]);
 
-  // Redirect to table selection if no table selected
+  // Redirect to settings (authenticated) or select-table (guest) if no table selected
   useEffect(() => {
     if (!selectedTable) {
-      router.push("/select-table");
+      router.push(isAuthenticated ? "/settings" : "/select-table");
     }
-  }, [selectedTable, router]);
+  }, [selectedTable, isAuthenticated, router]);
 
   const handlePlaceOrder = async () => {
     if (!cart || !selectedTable) {

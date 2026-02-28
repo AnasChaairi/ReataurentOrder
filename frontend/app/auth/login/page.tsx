@@ -3,11 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/contexts/AuthContext";
 import { z } from "zod/v4";
+import { Eye, EyeOff, Mail, Lock, Coffee } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Please enter a valid email"),
@@ -15,219 +13,218 @@ const loginSchema = z.object({
 });
 
 export default function LoginPage() {
-  const router = useRouter();
   const { login } = useAuth();
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
+    if (errors[name] || errors.general) {
+      setErrors((prev) => ({ ...prev, [name]: "", general: "" }));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setErrors({});
 
-    // Zod validation
+    // Client-side validation first
     const result = loginSchema.safeParse(formData);
     if (!result.success) {
       const newErrors: { [key: string]: string } = {};
       for (const issue of result.error.issues) {
         const field = issue.path[0];
-        if (field && typeof field === 'string') {
-          newErrors[field] = issue.message;
-        }
+        if (field && typeof field === 'string') newErrors[field] = issue.message;
       }
       setErrors(newErrors);
-      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
     try {
+      // login() in AuthContext handles navigation (router.push) on success
       await login(formData);
-      // Navigation handled by AuthContext
-      router.push('/');
     } catch (error: any) {
-      setErrors({ general: error.message || "Invalid email or password" });
+      const data = error?.response?.data;
+      let message = 'Invalid email or password. Please try again.';
+
+      if (data?.detail) message = data.detail;
+      else if (data?.non_field_errors?.[0]) message = data.non_field_errors[0];
+      else if (typeof data === 'string') message = data;
+
+      setErrors({ general: message });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const [userType, setUserType] = useState<'customer' | 'staff'>('customer');
-
   return (
     <div className="min-h-screen flex">
-      {/* Left Side - Branded Image */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-baristas-brown-dark">
-        <div className="absolute inset-0 z-0">
+      {/* Left — branded panel */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-baristas-brown-dark overflow-hidden">
+        <div className="absolute inset-0">
           <Image
-            src="/hero-image.webp"
-            alt="BARISTAS Interior"
+            src="/baristas-background.png"
+            alt="Baristas interior"
             fill
-            className="object-cover opacity-40"
+            className="object-cover opacity-30"
           />
+          <div className="absolute inset-0 bg-gradient-to-br from-baristas-brown-dark/80 to-baristas-brown/60" />
         </div>
-        <div className="relative z-10 flex flex-col items-center justify-center w-full p-12">
-          <div className="w-32 h-32 bg-baristas-brown rounded-full flex items-center justify-center mb-6 border-4 border-baristas-cream">
-            <span className="text-baristas-cream text-5xl font-bold">B</span>
+        <div className="relative z-10 flex flex-col items-center justify-center w-full p-12 text-center">
+          <div className="relative w-28 h-28 rounded-full overflow-hidden ring-4 ring-baristas-cream/30 mb-6">
+            <Image src="/baristas-logo.png" alt="Baristas Logo" fill className="object-cover" />
           </div>
-          <h1 className="text-6xl font-bold text-white mb-4 tracking-wider">BARISTAS</h1>
-          <p className="text-baristas-cream text-center text-lg max-w-md">
+          <h1 className="text-5xl font-bold text-white mb-3 tracking-widest">BARISTAS</h1>
+          <p className="text-baristas-cream/70 text-lg max-w-xs leading-relaxed">
             Your daily dose of comfort. Experience the finest coffee and cuisine.
           </p>
+          <div className="mt-12 grid grid-cols-3 gap-4 w-full max-w-xs">
+            {['☕ Espresso', '🧁 Pastries', '🍽️ Brunch'].map((item) => (
+              <div key={item} className="bg-white/8 backdrop-blur-sm rounded-xl px-3 py-2 text-baristas-cream/60 text-xs text-center border border-white/10">
+                {item}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right — form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-baristas-brown-dark px-6 py-12">
         <div className="w-full max-w-md">
-          {/* Logo for mobile */}
+
+          {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/">
-              <div className="inline-flex flex-col items-center">
-                <div className="w-16 h-16 bg-baristas-brown rounded-full flex items-center justify-center mb-4 border-3 border-baristas-cream">
-                  <span className="text-baristas-cream text-2xl font-bold">B</span>
+              <div className="inline-flex flex-col items-center gap-3">
+                <div className="relative w-16 h-16 rounded-full overflow-hidden ring-2 ring-baristas-cream/30">
+                  <Image src="/baristas-logo.png" alt="Baristas Logo" fill className="object-cover" />
                 </div>
-                <h1 className="text-2xl font-bold text-white tracking-wider">BARISTAS</h1>
+                <span className="text-white text-xl font-bold tracking-widest">BARISTAS</span>
               </div>
             </Link>
           </div>
 
-          {/* Header */}
-          <div className="text-right mb-8">
-            <Link href="/">
-              <button className="flex items-center space-x-2 text-white/90 hover:text-white transition-colors ml-auto">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span>Your account</span>
-              </button>
-            </Link>
-          </div>
-
-          {/* Welcome Text */}
+          {/* Heading */}
           <div className="mb-8">
-            <h2 className="text-4xl font-bold text-white mb-4 flex items-center gap-3">
-              Welcome Back ☕
+            <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+              Welcome back <Coffee className="w-7 h-7 text-baristas-cream" />
             </h2>
-            <p className="text-gray-300">
+            <p className="text-white/50 text-sm">
               Log in to continue your order or manage your dashboard.
             </p>
           </div>
 
-          {/* User Type Toggle */}
-          <div className="flex mb-8 bg-baristas-brown/50 rounded-full p-1">
-            <button
-              onClick={() => setUserType('customer')}
-              className={`flex-1 py-3 px-6 rounded-full font-semibold transition-all ${
-                userType === 'customer'
-                  ? 'bg-baristas-cream text-baristas-brown-dark'
-                  : 'text-white/70 hover:text-white'
-              }`}
-            >
-              Customer
-            </button>
-            <button
-              onClick={() => setUserType('staff')}
-              className={`flex-1 py-3 px-6 rounded-full font-semibold transition-all ${
-                userType === 'staff'
-                  ? 'bg-baristas-cream text-baristas-brown-dark'
-                  : 'text-white/70 hover:text-white'
-              }`}
-            >
-              Staff
-            </button>
-          </div>
-
+          {/* General error */}
           {errors.general && (
-            <div className="mb-6 p-4 bg-red-900/30 border border-red-500/50 rounded-xl">
+            <div className="mb-6 p-4 bg-red-900/30 border border-red-500/40 rounded-2xl">
               <p className="text-red-300 text-sm text-center">{errors.general}</p>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Username Input */}
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+            {/* Email */}
             <div>
+              <label htmlFor="email" className="block text-sm font-medium text-white/70 mb-1.5">
+                Email address
+              </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
                 <input
-                  type="text"
+                  id="email"
+                  type="email"
                   name="email"
-                  placeholder="Username"
+                  autoComplete="email"
+                  placeholder="your@email.com"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full pl-12 pr-4 py-4 bg-baristas-brown/40 border-2 border-baristas-brown-light/30 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-baristas-cream transition-colors"
+                  className={`w-full pl-11 pr-4 py-3.5 bg-baristas-brown/40 border-2 rounded-xl text-white placeholder-white/25 focus:outline-none transition-colors ${
+                    errors.email
+                      ? 'border-red-500/60 focus:border-red-400'
+                      : 'border-baristas-brown-light/25 focus:border-baristas-cream/60'
+                  }`}
                 />
               </div>
-              {errors.email && <p className="mt-2 text-red-300 text-sm">{errors.email}</p>}
+              {errors.email && <p className="mt-1.5 text-red-300 text-xs">{errors.email}</p>}
             </div>
 
-            {/* Password Input */}
+            {/* Password */}
             <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-sm font-medium text-white/70">
+                  Password
+                </label>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-xs text-baristas-cream/70 hover:text-baristas-cream transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
                 <input
-                  type="password"
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
                   name="password"
-                  placeholder="Password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full pl-12 pr-4 py-4 bg-baristas-brown/40 border-2 border-baristas-brown-light/30 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-baristas-cream transition-colors"
+                  className={`w-full pl-11 pr-12 py-3.5 bg-baristas-brown/40 border-2 rounded-xl text-white placeholder-white/25 focus:outline-none transition-colors ${
+                    errors.password
+                      ? 'border-red-500/60 focus:border-red-400'
+                      : 'border-baristas-brown-light/25 focus:border-baristas-cream/60'
+                  }`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              {errors.password && <p className="mt-2 text-red-300 text-sm">{errors.password}</p>}
+              {errors.password && <p className="mt-1.5 text-red-300 text-xs">{errors.password}</p>}
             </div>
 
-            {/* Forgot Password */}
-            <div className="text-right">
-              <Link
-                href="/auth/forgot-password"
-                className="text-baristas-cream hover:text-white font-medium text-sm transition-colors underline"
-              >
-                Forgot Password?
-              </Link>
-            </div>
-
-            {/* Sign In Button */}
+            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-baristas-cream text-baristas-brown-dark py-4 rounded-xl font-bold text-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-baristas-cream text-baristas-brown-dark py-3.5 rounded-xl font-bold text-base hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg mt-2"
             >
-              {isLoading ? "Signing in..." : "Sign in"}
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-baristas-brown/30 border-t-baristas-brown rounded-full animate-spin" />
+                  Signing in…
+                </span>
+              ) : (
+                'Sign in'
+              )}
             </button>
           </form>
 
-          {/* Create Account Link */}
+          {/* Register link */}
           <div className="mt-8 text-center">
-            <p className="text-gray-300">
-              New to BARISTAS?{" "}
-              <Link
-                href="/auth/register"
-                className="text-baristas-cream hover:text-white font-bold underline transition-colors"
-              >
-                Create an Account
+            <p className="text-white/40 text-sm">
+              New to BARISTAS?{' '}
+              <Link href="/auth/register" className="text-baristas-cream font-semibold hover:text-white transition-colors">
+                Create an account
               </Link>
             </p>
+          </div>
+
+          {/* Back home */}
+          <div className="mt-4 text-center">
+            <Link href="/" className="text-white/25 hover:text-white/50 text-xs transition-colors">
+              ← Back to home
+            </Link>
           </div>
         </div>
       </div>
