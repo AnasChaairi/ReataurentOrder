@@ -403,6 +403,17 @@ class OdooMenuSyncService:
                 p for p in combo_products if not p.get('is_combo') is False
             ]
 
+            # Deduplicate products by normalized name (keep first occurrence)
+            seen_names = set()
+            unique_products = []
+            for p in all_products:
+                norm = p['name'].strip().upper()
+                if norm not in seen_names:
+                    seen_names.add(norm)
+                    unique_products.append(p)
+            logger.info(f"Deduped {len(all_products)} -> {len(unique_products)} products by name")
+            all_products = unique_products
+
             # Step 1: Sync categories (from regular + combo products)
             category_map = {}  # Map Odoo category ID -> Django Category
             for product in all_products:
@@ -431,6 +442,16 @@ class OdooMenuSyncService:
                             stats['categories_created'] += 1
                         else:
                             stats['categories_updated'] += 1
+
+            # Deduplicate pos_products by normalized name too
+            seen_pos = set()
+            unique_pos = []
+            for p in pos_products:
+                norm = p['name'].strip().upper()
+                if norm not in seen_pos:
+                    seen_pos.add(norm)
+                    unique_pos.append(p)
+            pos_products = unique_pos
 
             # Step 2: Sync menu items
             for product in pos_products:

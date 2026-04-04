@@ -1,25 +1,84 @@
+from django.contrib.auth import get_user_model
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from accounts.permissions import IsAdmin
+from accounts.permissions import IsAdmin, IsAdminOrRestaurantOwner
 from .models import Restaurant
 from .serializers import RestaurantSerializer, RestaurantListSerializer
 
+User = get_user_model()
+
 
 class RestaurantViewSet(viewsets.ModelViewSet):
-    """Admin-only CRUD for restaurants."""
+    """CRUD for restaurants — admins see all, owners see their own."""
 
     queryset = Restaurant.objects.select_related('owner', 'odoo_config')
     serializer_class = RestaurantSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdminOrRestaurantOwner]
     ordering = ['name']
+
+    def get_permissions(self):
+        if self.action in ('create', 'destroy', 'sync_menu', 'sync_tables', 'assign_odoo_config'):
+            return [IsAuthenticated(), IsAdmin()]
+        return [IsAuthenticated(), IsAdminOrRestaurantOwner()]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Restaurant.objects.select_related('owner', 'odoo_config')
+        if user.role == User.Role.ADMIN:
+            return qs
+        if user.role == User.Role.RESTAURANT_OWNER:
+            from django.db.models import Q
+            return qs.filter(Q(owner=user) | Q(id=user.restaurant_id))
+        return qs.none()
 
     def get_serializer_class(self):
         if self.action == 'list':
             return RestaurantListSerializer
         return RestaurantSerializer
+
+    @action(detail=True, methods=['get'])
+    def staff(self, request, pk=None):
+        """List users assigned to this restaurant."""
+        restaurant = self.get_object()
+        staff_members = User.objects.filter(restaurant=restaurant).values(
+            'id', 'email', 'first_name', 'last_name', 'role', 'is_active'
+        )
+        return Response(list(staff_members))
+
+    @action(detail=True, methods=['post'], url_path='assign_staff')
+    def assign_staff(self, request, pk=None):
+        """Assign or remove a user from this restaurant."""
+        restaurant = self.get_object()
+        user_id = request.data.get('user_id')
+        action_type = request.data.get('action')  # 'assign' or 'remove'
+
+        if not user_id or action_type not in ('assign', 'remove'):
+            return Response(
+                {'error': 'Provide user_id and action (assign/remove)'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            target_user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if action_type == 'assign':
+            target_user.restaurant = restaurant
+            target_user.save(update_fields=['restaurant'])
+            return Response({'message': f'{target_user.email} assigned to {restaurant.name}'})
+        else:
+            if target_user.restaurant_id != restaurant.id:
+                return Response(
+                    {'error': 'User is not assigned to this restaurant'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            target_user.restaurant = None
+            target_user.save(update_fields=['restaurant'])
+            return Response({'message': f'{target_user.email} removed from {restaurant.name}'})
 
     @action(detail=True, methods=['post'])
     def assign_odoo_config(self, request, pk=None):
@@ -28,7 +87,6 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         odoo_config_id = request.data.get('odoo_config_id')
 
         if odoo_config_id is None:
-            # Unassign
             restaurant.odoo_config = None
             restaurant.save(update_fields=['odoo_config'])
             return Response({'message': 'Odoo config unassigned'})

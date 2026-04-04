@@ -13,6 +13,15 @@ export interface Restaurant {
   updated_at: string;
 }
 
+export interface StaffMember {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  is_active: boolean;
+}
+
 export interface RestaurantListItem {
   id: number;
   name: string;

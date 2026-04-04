@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useRouter } from "next/navigation";
 import { restaurantService } from "@/services/restaurant.service";
-import { Restaurant, RestaurantListItem } from "@/types/restaurant.types";
+import { Restaurant, RestaurantListItem, StaffMember } from "@/types/restaurant.types";
 import api from "@/lib/api";
 
 interface UserOption {
@@ -24,14 +24,14 @@ interface OdooConfigOption {
 }
 
 export default function RestaurantsPage() {
-  const { isAdmin, isLoading: authLoading } = useAdmin();
+  const { isAdmin, isOwner, isWaiter, isLoading: authLoading } = useAdmin();
   const router = useRouter();
   const [restaurants, setRestaurants] = useState<RestaurantListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Create form state
+  // Create form state (admin only)
   const [showCreate, setShowCreate] = useState(false);
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
@@ -50,6 +50,19 @@ export default function RestaurantsPage() {
   const [selectedOwner, setSelectedOwner] = useState<number | "">("");
   const [syncing, setSyncing] = useState<string | null>(null);
 
+  // Staff management
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [addStaffUserId, setAddStaffUserId] = useState<number | "">("");
+
+  // Editable fields for owner
+  const [editName, setEditName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const canAccess = isAdmin || isOwner;
+
   const fetchRestaurants = useCallback(async () => {
     try {
       setLoading(true);
@@ -63,6 +76,7 @@ export default function RestaurantsPage() {
   }, []);
 
   const fetchDropdownData = useCallback(async () => {
+    if (!isAdmin) return;
     try {
       const [usersRes, configsRes] = await Promise.all([
         api.get("/api/auth/admin/users/"),
@@ -77,20 +91,20 @@ export default function RestaurantsPage() {
         Array.isArray(configsData) ? configsData : configsData.results ?? []
       );
     } catch {
-      // Non-critical, dropdowns just won't populate
+      // Non-critical
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
-    if (!authLoading && !isAdmin) {
+    if (!authLoading && !canAccess) {
       router.push("/admin");
       return;
     }
-    if (!authLoading && isAdmin) {
+    if (!authLoading && canAccess) {
       fetchRestaurants();
       fetchDropdownData();
     }
-  }, [authLoading, isAdmin, router, fetchRestaurants, fetchDropdownData]);
+  }, [authLoading, canAccess, router, fetchRestaurants, fetchDropdownData]);
 
   // Auto-clear success message
   useEffect(() => {
@@ -147,8 +161,23 @@ export default function RestaurantsPage() {
       setExpandedDetail(detail);
       setSelectedOdooConfig(detail.odoo_config ?? "");
       setSelectedOwner(detail.owner ?? "");
+      setEditName(detail.name);
+      setEditAddress(detail.address || "");
+      setEditPhone(detail.phone || "");
     } catch {
       setError("Failed to load restaurant details");
+    }
+  };
+
+  const loadStaff = async (id: number) => {
+    setStaffLoading(true);
+    try {
+      const data = await restaurantService.getStaff(id);
+      setStaffMembers(data);
+    } catch {
+      setStaffMembers([]);
+    } finally {
+      setStaffLoading(false);
     }
   };
 
@@ -156,9 +185,10 @@ export default function RestaurantsPage() {
     if (expandedId === id) {
       setExpandedId(null);
       setExpandedDetail(null);
+      setStaffMembers([]);
     } else {
       setExpandedId(id);
-      await loadRestaurantDetail(id);
+      await Promise.all([loadRestaurantDetail(id), loadStaff(id)]);
     }
   };
 
@@ -212,6 +242,53 @@ export default function RestaurantsPage() {
     }
   };
 
+  const handleSaveDetails = async () => {
+    if (!expandedId) return;
+    setSaving(true);
+    try {
+      await restaurantService.updateRestaurant(expandedId, {
+        name: editName,
+        address: editAddress,
+        phone: editPhone,
+      });
+      setSuccess("Restaurant details updated");
+      await loadRestaurantDetail(expandedId);
+      fetchRestaurants();
+    } catch {
+      setError("Failed to update restaurant details");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddStaff = async () => {
+    if (!expandedId || addStaffUserId === "") return;
+    try {
+      await restaurantService.assignStaff(expandedId, Number(addStaffUserId));
+      setSuccess("Staff member assigned");
+      setAddStaffUserId("");
+      await loadStaff(expandedId);
+    } catch {
+      setError("Failed to assign staff member");
+    }
+  };
+
+  const handleRemoveStaff = async (userId: number) => {
+    if (!expandedId) return;
+    try {
+      await restaurantService.removeStaff(expandedId, userId);
+      setSuccess("Staff member removed");
+      await loadStaff(expandedId);
+    } catch {
+      setError("Failed to remove staff member");
+    }
+  };
+
+  // Users not already in this restaurant's staff (for the add dropdown)
+  const availableUsers = users.filter(
+    (u) => !staffMembers.some((s) => s.id === u.id)
+  );
+
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -224,17 +301,23 @@ export default function RestaurantsPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Restaurants</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isOwner ? "My Restaurant" : "Restaurants"}
+          </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Create restaurants, assign owners and Odoo configs, sync menus &amp; tables
+            {isOwner
+              ? "Manage your restaurant details and staff"
+              : "Create restaurants, assign owners and Odoo configs, sync menus & tables"}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 bg-[#4A3428] text-white rounded-lg hover:bg-[#3d2b20] transition-colors"
-        >
-          {showCreate ? "Cancel" : "+ New Restaurant"}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-4 py-2 bg-[#4A3428] text-white rounded-lg hover:bg-[#3d2b20] transition-colors"
+          >
+            {showCreate ? "Cancel" : "+ New Restaurant"}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -255,8 +338,8 @@ export default function RestaurantsPage() {
         </div>
       )}
 
-      {/* Create Form */}
-      {showCreate && (
+      {/* Create Form — admin only */}
+      {isAdmin && showCreate && (
         <form
           onSubmit={handleCreate}
           className="mb-6 p-6 bg-white rounded-lg shadow border border-gray-200"
@@ -408,68 +491,18 @@ export default function RestaurantsPage() {
                   <tr>
                     <td colSpan={5} className="px-6 py-6 bg-gray-50">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Owner Assignment */}
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
-                          <h3 className="font-semibold text-gray-800 mb-3">
-                            Owner
-                          </h3>
-                          <div className="flex items-end gap-3">
-                            <div className="flex-1">
-                              <select
-                                value={selectedOwner}
-                                onChange={(e) =>
-                                  setSelectedOwner(
-                                    e.target.value
-                                      ? Number(e.target.value)
-                                      : ""
-                                  )
-                                }
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
-                              >
-                                <option value="">-- No owner --</option>
-                                {users.map((u) => (
-                                  <option key={u.id} value={u.id}>
-                                    {u.first_name} {u.last_name} ({u.email})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <button
-                              onClick={handleAssignOwner}
-                              className="px-4 py-2 bg-[#4A3428] text-white text-sm rounded-lg hover:bg-[#3d2b20] transition-colors"
-                            >
-                              Save
-                            </button>
-                          </div>
-                          {expandedDetail.owner_name && (
-                            <p className="text-xs text-gray-500 mt-2">
-                              Current: {expandedDetail.owner_name}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Odoo Config Assignment */}
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
-                          <h3 className="font-semibold text-gray-800 mb-3">
-                            Odoo Configuration
-                          </h3>
-                          {odooConfigs.length === 0 ? (
-                            <p className="text-sm text-gray-500">
-                              No Odoo configs found.{" "}
-                              <a
-                                href="/admin/odoo-settings"
-                                className="text-blue-600 underline"
-                              >
-                                Create one first
-                              </a>
-                            </p>
-                          ) : (
+                        {/* Owner Assignment — admin only */}
+                        {isAdmin && (
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h3 className="font-semibold text-gray-800 mb-3">
+                              Owner
+                            </h3>
                             <div className="flex items-end gap-3">
                               <div className="flex-1">
                                 <select
-                                  value={selectedOdooConfig}
+                                  value={selectedOwner}
                                   onChange={(e) =>
-                                    setSelectedOdooConfig(
+                                    setSelectedOwner(
                                       e.target.value
                                         ? Number(e.target.value)
                                         : ""
@@ -477,89 +510,257 @@ export default function RestaurantsPage() {
                                   }
                                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
                                 >
-                                  <option value="">-- None --</option>
-                                  {odooConfigs.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.name} ({c.url})
-                                      {c.pos_config_name
-                                        ? ` - POS: ${c.pos_config_name}`
-                                        : ""}
+                                  <option value="">-- No owner --</option>
+                                  {users.map((u) => (
+                                    <option key={u.id} value={u.id}>
+                                      {u.first_name} {u.last_name} ({u.email})
                                     </option>
                                   ))}
                                 </select>
                               </div>
                               <button
-                                onClick={handleAssignOdooConfig}
+                                onClick={handleAssignOwner}
                                 className="px-4 py-2 bg-[#4A3428] text-white text-sm rounded-lg hover:bg-[#3d2b20] transition-colors"
                               >
                                 Save
                               </button>
                             </div>
-                          )}
-                          {expandedDetail.odoo_config_name && (
-                            <p className="text-xs text-gray-500 mt-2">
-                              Current: {expandedDetail.odoo_config_name}
-                            </p>
-                          )}
-                        </div>
+                            {expandedDetail.owner_name && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                Current: {expandedDetail.owner_name}
+                              </p>
+                            )}
+                          </div>
+                        )}
 
-                        {/* Restaurant Details */}
+                        {/* Odoo Config Assignment — admin only */}
+                        {isAdmin && (
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h3 className="font-semibold text-gray-800 mb-3">
+                              Odoo Configuration
+                            </h3>
+                            {odooConfigs.length === 0 ? (
+                              <p className="text-sm text-gray-500">
+                                No Odoo configs found.{" "}
+                                <a
+                                  href="/admin/odoo-settings"
+                                  className="text-blue-600 underline"
+                                >
+                                  Create one first
+                                </a>
+                              </p>
+                            ) : (
+                              <div className="flex items-end gap-3">
+                                <div className="flex-1">
+                                  <select
+                                    value={selectedOdooConfig}
+                                    onChange={(e) =>
+                                      setSelectedOdooConfig(
+                                        e.target.value
+                                          ? Number(e.target.value)
+                                          : ""
+                                      )
+                                    }
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
+                                  >
+                                    <option value="">-- None --</option>
+                                    {odooConfigs.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name} ({c.url})
+                                        {c.pos_config_name
+                                          ? ` - POS: ${c.pos_config_name}`
+                                          : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <button
+                                  onClick={handleAssignOdooConfig}
+                                  className="px-4 py-2 bg-[#4A3428] text-white text-sm rounded-lg hover:bg-[#3d2b20] transition-colors"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            )}
+                            {expandedDetail.odoo_config_name && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                Current: {expandedDetail.odoo_config_name}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Editable Restaurant Details */}
                         <div className="bg-white rounded-lg p-4 border border-gray-200">
                           <h3 className="font-semibold text-gray-800 mb-3">
                             Details
                           </h3>
-                          <dl className="text-sm space-y-2">
-                            <div className="flex justify-between">
-                              <dt className="text-gray-500">Slug:</dt>
-                              <dd className="text-gray-900 font-mono">
-                                {expandedDetail.slug}
-                              </dd>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Name</label>
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
+                              />
                             </div>
-                            <div className="flex justify-between">
-                              <dt className="text-gray-500">Address:</dt>
-                              <dd className="text-gray-900">
-                                {expandedDetail.address || "Not set"}
-                              </dd>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Address</label>
+                              <input
+                                type="text"
+                                value={editAddress}
+                                onChange={(e) => setEditAddress(e.target.value)}
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
+                                placeholder="Not set"
+                              />
                             </div>
-                            <div className="flex justify-between">
-                              <dt className="text-gray-500">Phone:</dt>
-                              <dd className="text-gray-900">
-                                {expandedDetail.phone || "Not set"}
-                              </dd>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Phone</label>
+                              <input
+                                type="text"
+                                value={editPhone}
+                                onChange={(e) => setEditPhone(e.target.value)}
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
+                                placeholder="Not set"
+                              />
                             </div>
-                          </dl>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-400">
+                                Slug: <span className="font-mono">{expandedDetail.slug}</span>
+                              </span>
+                              <button
+                                onClick={handleSaveDetails}
+                                disabled={saving}
+                                className="px-4 py-2 bg-[#4A3428] text-white text-sm rounded-lg hover:bg-[#3d2b20] disabled:opacity-50 transition-colors"
+                              >
+                                {saving ? "Saving..." : "Save Details"}
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Sync Actions */}
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        {/* Sync Actions — admin only */}
+                        {isAdmin && (
+                          <div className="bg-white rounded-lg p-4 border border-gray-200">
+                            <h3 className="font-semibold text-gray-800 mb-3">
+                              Odoo Sync
+                            </h3>
+                            {!expandedDetail.odoo_config ? (
+                              <p className="text-sm text-gray-500">
+                                Assign an Odoo config first to enable syncing.
+                              </p>
+                            ) : (
+                              <div className="flex gap-3">
+                                <button
+                                  onClick={() => handleSync("menu")}
+                                  disabled={syncing !== null}
+                                  className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                >
+                                  {syncing === "menu"
+                                    ? "Syncing..."
+                                    : "Sync Menu"}
+                                </button>
+                                <button
+                                  onClick={() => handleSync("tables")}
+                                  disabled={syncing !== null}
+                                  className="flex-1 px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                                >
+                                  {syncing === "tables"
+                                    ? "Syncing..."
+                                    : "Sync Tables"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Staff Management */}
+                        <div className="bg-white rounded-lg p-4 border border-gray-200 md:col-span-2">
                           <h3 className="font-semibold text-gray-800 mb-3">
-                            Odoo Sync
+                            Staff Members
                           </h3>
-                          {!expandedDetail.odoo_config ? (
-                            <p className="text-sm text-gray-500">
-                              Assign an Odoo config first to enable syncing.
-                            </p>
-                          ) : (
-                            <div className="flex gap-3">
+
+                          {/* Add Staff */}
+                          {isAdmin && availableUsers.length > 0 && (
+                            <div className="flex items-end gap-3 mb-4">
+                              <div className="flex-1">
+                                <label className="block text-xs text-gray-500 mb-1">
+                                  Add staff member
+                                </label>
+                                <select
+                                  value={addStaffUserId}
+                                  onChange={(e) =>
+                                    setAddStaffUserId(
+                                      e.target.value ? Number(e.target.value) : ""
+                                    )
+                                  }
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#4A3428] focus:outline-none text-sm"
+                                >
+                                  <option value="">-- Select user --</option>
+                                  {availableUsers.map((u) => (
+                                    <option key={u.id} value={u.id}>
+                                      {u.first_name} {u.last_name} ({u.email}) - {u.role}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                               <button
-                                onClick={() => handleSync("menu")}
-                                disabled={syncing !== null}
-                                className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                onClick={handleAddStaff}
+                                disabled={addStaffUserId === ""}
+                                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
                               >
-                                {syncing === "menu"
-                                  ? "Syncing..."
-                                  : "Sync Menu"}
-                              </button>
-                              <button
-                                onClick={() => handleSync("tables")}
-                                disabled={syncing !== null}
-                                className="flex-1 px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
-                              >
-                                {syncing === "tables"
-                                  ? "Syncing..."
-                                  : "Sync Tables"}
+                                Add
                               </button>
                             </div>
+                          )}
+
+                          {staffLoading ? (
+                            <p className="text-sm text-gray-400">Loading staff...</p>
+                          ) : staffMembers.length === 0 ? (
+                            <p className="text-sm text-gray-500">No staff assigned to this restaurant.</p>
+                          ) : (
+                            <table className="min-w-full divide-y divide-gray-200 text-sm">
+                              <thead>
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {staffMembers.map((member) => (
+                                  <tr key={member.id}>
+                                    <td className="px-3 py-2 text-gray-900">
+                                      {member.first_name} {member.last_name}
+                                    </td>
+                                    <td className="px-3 py-2 text-gray-600">{member.email}</td>
+                                    <td className="px-3 py-2">
+                                      <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800">
+                                        {member.role}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                        member.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                                      }`}>
+                                        {member.is_active ? "Active" : "Inactive"}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <button
+                                        onClick={() => handleRemoveStaff(member.id)}
+                                        className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                      >
+                                        Remove
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           )}
                         </div>
                       </div>
@@ -576,7 +777,9 @@ export default function RestaurantsPage() {
                 >
                   <p className="text-lg mb-2">No restaurants yet</p>
                   <p className="text-sm">
-                    Click &quot;+ New Restaurant&quot; to create one.
+                    {isAdmin
+                      ? 'Click "+ New Restaurant" to create one.'
+                      : "No restaurant is assigned to your account yet."}
                   </p>
                 </td>
               </tr>

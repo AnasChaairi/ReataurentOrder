@@ -1,5 +1,5 @@
 import api from '@/lib/api';
-import { Restaurant, RestaurantListItem } from '@/types/restaurant.types';
+import { Restaurant, RestaurantListItem, StaffMember } from '@/types/restaurant.types';
 
 class RestaurantService {
   async getRestaurants(): Promise<RestaurantListItem[]> {
@@ -41,6 +41,25 @@ class RestaurantService {
   async syncTables(restaurantId: number): Promise<{ status: string; [key: string]: unknown }> {
     const response = await api.post(`/api/restaurants/${restaurantId}/sync_tables/`);
     return response.data;
+  }
+
+  async getStaff(restaurantId: number): Promise<StaffMember[]> {
+    const response = await api.get<StaffMember[]>(`/api/restaurants/${restaurantId}/staff/`);
+    return response.data;
+  }
+
+  async assignStaff(restaurantId: number, userId: number): Promise<void> {
+    await api.post(`/api/restaurants/${restaurantId}/assign_staff/`, {
+      user_id: userId,
+      action: 'assign',
+    });
+  }
+
+  async removeStaff(restaurantId: number, userId: number): Promise<void> {
+    await api.post(`/api/restaurants/${restaurantId}/assign_staff/`, {
+      user_id: userId,
+      action: 'remove',
+    });
   }
 }
 

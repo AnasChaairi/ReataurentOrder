@@ -13,7 +13,7 @@ interface MenuItem {
 
 export function AdminSidebar() {
   const pathname = usePathname();
-  const { isAdmin } = useAdmin();
+  const { isAdmin, isOwner } = useAdmin();
 
   const allMenuItems: MenuItem[] = [
     {
@@ -22,10 +22,9 @@ export function AdminSidebar() {
       icon: "📊",
     },
     {
-      name: "Restaurants",
+      name: isOwner ? "My Restaurant" : "Restaurants",
       href: "/admin/restaurants",
       icon: "🏪",
-      adminOnly: true,
     },
     {
       name: "Menu Items",

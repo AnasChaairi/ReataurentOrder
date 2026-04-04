@@ -68,6 +68,16 @@ class IsAdminOrRestaurantOwner(permissions.BasePermission):
             request.user.role in [User.Role.ADMIN, User.Role.RESTAURANT_OWNER]
         )
 
+    def has_object_permission(self, request, view, obj):
+        if request.user.role == User.Role.ADMIN:
+            return True
+        if request.user.role == User.Role.RESTAURANT_OWNER:
+            if hasattr(obj, 'owner'):
+                return obj.owner == request.user
+            if hasattr(obj, 'restaurant'):
+                return obj.restaurant and obj.restaurant.owner == request.user
+        return False
+
 
 class IsAdminOrWaiter(permissions.BasePermission):
     """Permission check for Admin or Waiter roles."""
