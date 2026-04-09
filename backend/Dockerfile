@@ -1,5 +1,5 @@
-# Use Python 3.12 slim image
-FROM python:3.12-slim
+# Use Python 3.12 Alpine — small image, no apt-get needed
+FROM python:3.12-alpine
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -10,14 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    gcc \
-    python3-dev \
-    musl-dev \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# No system packages needed: psycopg2-binary bundles libpq internally.
+# pg_isready (healthcheck) runs inside the db container, not here.
 
 # Install Python dependencies
 COPY requirements.txt /app/
@@ -30,8 +24,8 @@ COPY . /app/
 # Create necessary directories
 RUN mkdir -p /app/logs /app/media /app/staticfiles
 
-# Collect static files
-RUN python manage.py collectstatic --noinput || true
+# collectstatic runs at container startup (see docker-compose command),
+# where SECRET_KEY and other env vars are available.
 
 # Expose port
 EXPOSE 8000

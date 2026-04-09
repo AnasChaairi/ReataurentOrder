@@ -96,3 +96,15 @@ next-env.d.ts
 # Dev milestone docs
 MILESTONE_*.md
 CLAUDE.md
+
+# Persistent data directories (bind-mounted into containers)
+# Keep the directory skeletons (.gitkeep) but ignore all actual data
+data/postgres/pgdata/
+data/redis/*
+data/media/*
+data/static/*
+data/logs/*
+!data/**/.gitkeep
+
+# Legacy dev bind-mount (replaced by data/redis)
+redis_data/

@@ -316,21 +316,28 @@ class TableSession(models.Model):
         return total
 
     def end_session(self):
-        """End this session and update table status"""
+        """End this session and update table status to CLEANING."""
         if self.end_time is None:
             self.end_time = timezone.now()
-            self.save()
-
-            # Update table status to cleaning
-            self.table.status = 'CLEANING'
-            self.table.save()
+            self.save(update_fields=['end_time', 'updated_at'])
+            Table.objects.filter(pk=self.table_id).update(status='CLEANING')
 
     def save(self, *args, **kwargs):
-        """Auto-update table status when session starts/ends"""
-        is_new = self.pk is None
+        """Persist the session record.
+
+        Side-effectful table-status updates are intentionally limited:
+        - On INSERT of a new *active* session: set table to OCCUPIED.
+        - All other saves (updates, bulk ops, admin saves) are side-effect free.
+        - Ending a session is handled by end_session() which uses update_fields.
+
+        The check uses self._state.adding (set by Django before the first save)
+        rather than pk is None so that the guard is accurate even when pk is
+        pre-assigned (e.g. fixtures / tests).
+        """
+        is_new_active = self._state.adding and self.end_time is None
         super().save(*args, **kwargs)
 
-        if is_new and self.end_time is None:
-            # New active session - mark table as occupied
-            self.table.status = 'OCCUPIED'
-            self.table.save()
+        if is_new_active:
+            # Only fire the side effect on fresh active session creation.
+            # Use update() to avoid triggering Table.save() signals.
+            Table.objects.filter(pk=self.table_id).update(status='OCCUPIED')

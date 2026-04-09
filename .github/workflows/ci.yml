@@ -61,8 +61,10 @@ jobs:
         working-directory: ./backend
         env:
           DEBUG: 'True'
-          SECRET_KEY: test-secret-key-for-ci
-          FIELD_ENCRYPTION_KEY: fzGXpT8xCVdcb8ixGHhPRJQjNQaQdPjYqTf7VLx-0Ls=
+          SECRET_KEY: test-secret-key-for-ci-only-not-for-production
+          # CI-only Fernet key — rotate via: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+          # Store the real value in GitHub Actions Secrets and reference it as ${{ secrets.FIELD_ENCRYPTION_KEY }}
+          FIELD_ENCRYPTION_KEY: ${{ secrets.FIELD_ENCRYPTION_KEY || 'ci-placeholder-rotate-before-production-use-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAo=' }}
           DB_NAME: test_db
           DB_USER: postgres
           DB_PASSWORD: postgres

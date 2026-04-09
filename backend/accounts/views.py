@@ -281,55 +281,72 @@ class AdminUserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def waiters(self, request):
-        """Get all waiters with their statistics."""
+        """Get all waiters with their statistics — single-query implementation."""
         from tables.models import WaiterAssignment
-        from orders.models import Order
-        from django.db.models import Count, Sum, Q
+        from django.db.models import Count, Sum, Q, Prefetch
 
-        waiters = User.objects.filter(role=User.Role.WAITER)
-        waiter_data = []
+        # Fetch all active assignments in one query, then group by waiter in Python.
+        active_assignments_qs = WaiterAssignment.objects.filter(
+            shift_end__isnull=True
+        ).select_related('table')
 
-        for waiter in waiters:
-            # Get active assignments
-            active_assignments = WaiterAssignment.objects.filter(
-                waiter=waiter,
-                shift_end__isnull=True
-            ).select_related('table')
-
-            # Get order statistics
-            orders_stats = Order.objects.filter(waiter=waiter).aggregate(
-                total_orders=Count('id'),
-                confirmed_orders=Count('id', filter=Q(status='CONFIRMED')),
-                served_orders=Count('id', filter=Q(status='SERVED')),
-                total_revenue=Sum('total_amount', filter=Q(status__in=['CONFIRMED', 'PREPARING', 'READY', 'SERVED']))
+        waiters = (
+            User.objects.filter(role=User.Role.WAITER)
+            .prefetch_related(
+                Prefetch(
+                    'table_assignments',
+                    queryset=active_assignments_qs,
+                    to_attr='active_assignments',
+                )
             )
+            .annotate(
+                total_orders=Count('waiter_orders', distinct=True),
+                confirmed_orders=Count(
+                    'waiter_orders',
+                    filter=Q(waiter_orders__status='CONFIRMED'),
+                    distinct=True,
+                ),
+                served_orders=Count(
+                    'waiter_orders',
+                    filter=Q(waiter_orders__status='SERVED'),
+                    distinct=True,
+                ),
+                total_revenue=Sum(
+                    'waiter_orders__total_amount',
+                    filter=Q(waiter_orders__status__in=['CONFIRMED', 'PREPARING', 'READY', 'SERVED']),
+                ),
+            )
+        )
 
-            waiter_data.append({
-                'id': waiter.id,
-                'email': waiter.email,
-                'first_name': waiter.first_name,
-                'last_name': waiter.last_name,
-                'full_name': waiter.get_full_name(),
-                'is_active': waiter.is_active,
-                'phone_number': str(waiter.phone_number) if waiter.phone_number else None,
-                'created_at': waiter.created_at,
+        waiter_data = [
+            {
+                'id': w.id,
+                'email': w.email,
+                'first_name': w.first_name,
+                'last_name': w.last_name,
+                'full_name': w.get_full_name(),
+                'is_active': w.is_active,
+                'phone_number': str(w.phone_number) if w.phone_number else None,
+                'created_at': w.created_at,
                 'assigned_tables': [
                     {
-                        'id': assignment.table.id,
-                        'number': assignment.table.number,
-                        'section': assignment.table.section,
-                        'shift_start': assignment.shift_start
+                        'id': a.table.id,
+                        'number': a.table.number,
+                        'section': a.table.section,
+                        'shift_start': a.shift_start,
                     }
-                    for assignment in active_assignments
+                    for a in w.active_assignments
                 ],
                 'statistics': {
-                    'total_orders': orders_stats['total_orders'] or 0,
-                    'confirmed_orders': orders_stats['confirmed_orders'] or 0,
-                    'served_orders': orders_stats['served_orders'] or 0,
-                    'total_revenue': float(orders_stats['total_revenue'] or 0),
-                    'active_tables_count': active_assignments.count()
-                }
-            })
+                    'total_orders': w.total_orders or 0,
+                    'confirmed_orders': w.confirmed_orders or 0,
+                    'served_orders': w.served_orders or 0,
+                    'total_revenue': float(w.total_revenue or 0),
+                    'active_tables_count': len(w.active_assignments),
+                },
+            }
+            for w in waiters
+        ]
 
         return Response(waiter_data, status=status.HTTP_200_OK)
 

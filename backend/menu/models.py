@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils.text import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models import Avg, Count
@@ -125,15 +125,25 @@ class MenuItem(models.Model):
         return f"{self.name} ({self.category.name})"
 
     def save(self, *args, **kwargs):
-        """Auto-generate slug from name if not provided"""
+        """Auto-generate a restaurant-scoped slug from name if not provided.
+
+        Uses a transaction + select_for_update loop to prevent race conditions
+        when two concurrent saves produce the same base slug.
+        """
         if not self.slug:
             base_slug = slugify(self.name)
-            slug = base_slug
-            counter = 1
-            while MenuItem.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = slug
+            with transaction.atomic():
+                slug = base_slug
+                counter = 1
+                while (
+                    MenuItem.objects.select_for_update()
+                    .filter(slug=slug, restaurant=self.restaurant)
+                    .exclude(pk=self.pk)
+                    .exists()
+                ):
+                    slug = f"{base_slug}-{counter}"
+                    counter += 1
+                self.slug = slug
         super().save(*args, **kwargs)
 
     def get_average_rating(self):

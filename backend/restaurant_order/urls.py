@@ -25,7 +25,6 @@ urlpatterns = [
     path('api/menu/', include('menu.urls')),
     path('api/orders/', include('orders.urls')),
     path('api/tables/', include('tables.urls')),
-    path('api/waiters/', include('tables.urls')),  # Waiter-specific endpoints
     path('api/notifications/', include('notifications.urls')),
     path('api/admin/', include('analytics.urls')),
     path('api/odoo/', include('odoo_integration.urls')),

@@ -13,9 +13,9 @@ from accounts.permissions import IsAdmin, IsAdminOrWaiter, IsCustomer
 from accounts.throttles import OrderCreateRateThrottle
 from restaurants.mixins import RestaurantScopedMixin
 from notifications.services import notify_order_created, notify_order_status_change, notify_order_cancelled
+from .models import Order, OrderItem, OrderEvent
 
 logger = logging.getLogger(__name__)
-from .models import Order, OrderItem, OrderEvent
 from .serializers import (
     OrderSerializer, OrderListSerializer, OrderCreateSerializer,
     OrderStatusUpdateSerializer, OrderModifySerializer,
@@ -75,27 +75,27 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         return super().get_throttles()
 
     def create(self, request, *args, **kwargs):
-        """Create order and sync to Odoo synchronously"""
+        """Create order and dispatch async Odoo sync via Celery."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
 
-        # Sync to Odoo synchronously — use restaurant's config
+        # Dispatch Odoo sync asynchronously so the HTTP response is never blocked
+        # by network latency or Odoo downtime.  The Celery task handles retries.
         try:
-            from odoo_integration.django_services import OdooOrderSyncService
             config = getattr(order.restaurant, 'odoo_config', None) if order.restaurant else None
             if config and config.auto_sync_orders:
-                service = OdooOrderSyncService(config)
-                service.sync_order_to_odoo(order)
-                order.refresh_from_db()
+                from odoo_integration.tasks import sync_order_to_odoo as _celery_sync
+                user_id = request.user.id if request.user.is_authenticated else None
+                _celery_sync.delay(order.id, user_id)
         except Exception as e:
-            logger.error(f"Odoo sync failed for order {order.order_number}: {e}")
+            logger.error("Failed to enqueue Odoo sync for order %s: %s", order.order_number, e)
 
         # Send real-time notifications
         try:
             notify_order_created(order)
         except Exception as e:
-            logger.error(f"Failed to send order created notification: {e}")
+            logger.error("Failed to send order created notification: %s", e)
 
         # Return full order data via OrderSerializer
         response_serializer = OrderSerializer(order)
@@ -353,34 +353,27 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsAdminOrWaiter],
             url_path='sync-to-odoo')
     def sync_to_odoo(self, request, pk=None):
-        """Manually sync order to Odoo (Staff only)"""
+        """Manually trigger async Odoo sync for an order (Staff only)."""
         order = self.get_object()
 
+        config = getattr(order.restaurant, 'odoo_config', None) if order.restaurant else None
+        if not config:
+            return Response(
+                {'error': 'No Odoo configuration found for this restaurant'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
-            from odoo_integration.django_services import OdooOrderSyncService
-            config = getattr(order.restaurant, 'odoo_config', None) if order.restaurant else None
-
-            if not config:
-                return Response({
-                    'error': 'No Odoo configuration found for this restaurant'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            service = OdooOrderSyncService(config)
-            service.sync_order_to_odoo(order)
-            order.refresh_from_db()
-
-            return Response({
-                'message': f'Order {order.order_number} synced to Odoo successfully',
-                'order': OrderSerializer(order).data
-            })
-
+            from odoo_integration.tasks import sync_order_to_odoo as _celery_sync
+            _celery_sync.delay(order.id, request.user.id)
         except Exception as e:
-            logger.error(f"Manual Odoo sync failed for order {order.order_number}: {e}")
-            from django.conf import settings as django_settings
-            error_msg = str(e) if django_settings.DEBUG else 'Failed to sync order to Odoo. Please try again.'
-            return Response({
-                'error': error_msg
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error("Failed to enqueue manual Odoo sync for order %s: %s", order.order_number, e)
+            return Response(
+                {'error': 'Failed to enqueue sync task. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-
-from .models import OrderItemAddon
+        return Response({
+            'message': f'Odoo sync enqueued for order {order.order_number}.',
+            'order': OrderSerializer(order).data,
+        })

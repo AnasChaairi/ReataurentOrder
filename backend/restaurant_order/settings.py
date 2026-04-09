@@ -8,6 +8,15 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
+# Sentry SDK — imported at module level so the conditional init below works.
+# The actual init only runs when SENTRY_DSN is set and DEBUG is False.
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    _sentry_available = True
+except ImportError:
+    _sentry_available = False
+
 # Load environment variables
 load_dotenv()
 
@@ -27,9 +36,17 @@ if not DEBUG:
     if not FIELD_ENCRYPTION_KEY:
         raise ImproperlyConfigured('FIELD_ENCRYPTION_KEY environment variable is required in production')
 else:
-    # Allow insecure defaults only in development
+    # Allow insecure defaults only in development.
+    # NEVER use these values in production — they are intentionally weak placeholders.
     SECRET_KEY = SECRET_KEY or 'django-insecure-dev-only-key-change-in-production'
-    FIELD_ENCRYPTION_KEY = FIELD_ENCRYPTION_KEY or 'fzGXpT8xCVdcb8ixGHhPRJQjNQaQdPjYqTf7VLx-0Ls='
+    # Generate a real key with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    if not FIELD_ENCRYPTION_KEY:
+        raise ImproperlyConfigured(
+            'FIELD_ENCRYPTION_KEY must be set even in development. '
+            'Run: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" '
+            'and add it to your .env file.'
+        )
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -211,11 +228,19 @@ else:
 
 CORS_ALLOW_CREDENTIALS = True
 
-# Cache Configuration - Redis backend for cross-worker/container caching
+# Cache Configuration - django-redis backend (supports delete_pattern for bulk invalidation)
+_redis_password = os.getenv('REDIS_PASSWORD', '')
+_redis_auth = f':{_redis_password}@' if _redis_password else ''
+_redis_url = f"redis://{_redis_auth}{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/1"
+
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}/1",
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': _redis_url,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'IGNORE_EXCEPTIONS': True,  # Degrade gracefully if Redis is unreachable
+        },
     }
 }
 
@@ -303,12 +328,14 @@ LOGS_DIR.mkdir(exist_ok=True)
 
 # Sentry Configuration
 SENTRY_DSN = os.getenv('SENTRY_DSN')
-if SENTRY_DSN and not DEBUG:
+if SENTRY_DSN and not DEBUG and _sentry_available:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],
         traces_sample_rate=0.2,
-        send_default_pii=True,
+        # send_default_pii=False: do NOT send request bodies, cookies, or user PII
+        # to Sentry — required for GDPR compliance.
+        send_default_pii=False,
         environment=os.getenv('ENVIRONMENT', 'production'),
     )
 
@@ -317,7 +344,8 @@ MAX_UPLOAD_SIZE = int(os.getenv('MAX_UPLOAD_SIZE', 5242880))  # 5MB default
 
 # Security Settings (Production)
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    # Set SECURE_SSL_REDIRECT=False when SSL is not yet configured (e.g. HTTP-only staging).
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True') == 'True'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True

@@ -1,0 +1,9 @@
+# Ignore all data files but keep the directory structure
+postgres/*
+redis/*
+media/*
+static/*
+logs/*
+
+# Keep placeholder files
+!**/.gitkeep

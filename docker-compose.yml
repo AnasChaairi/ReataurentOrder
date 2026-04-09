@@ -6,7 +6,7 @@ services:
     image: postgres:16-alpine
     container_name: restaurant_db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres/pgdata:/var/lib/postgresql/data
     environment:
       - POSTGRES_DB=${DB_NAME:-restaurant_order_db}
       - POSTGRES_USER=${DB_USER:-postgres}
@@ -28,7 +28,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./redis_data:/data
+      - ./data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -46,8 +46,9 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./backend:/app
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      - ./data/static:/app/staticfiles
+      - ./data/media:/app/media
+      - ./data/logs:/app/logs
     ports:
       - "8000:8000"
     environment:
@@ -80,6 +81,7 @@ services:
     command: celery -A restaurant_order worker -l info
     volumes:
       - ./backend:/app
+      - ./data/logs:/app/logs
     environment:
       - DEBUG=${DEBUG:-True}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key}
@@ -109,6 +111,7 @@ services:
     command: celery -A restaurant_order beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - ./backend:/app
+      - ./data/logs:/app/logs
     environment:
       - DEBUG=${DEBUG:-True}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key}
@@ -138,6 +141,7 @@ services:
     command: daphne -b 0.0.0.0 -p 8001 restaurant_order.asgi:application
     volumes:
       - ./backend:/app
+      - ./data/logs:/app/logs
     ports:
       - "8001:8001"
     environment:
@@ -160,8 +164,3 @@ services:
 networks:
   restaurant_network:
     driver: bridge
-
-volumes:
-  postgres_data:
-  static_volume:
-  media_volume:

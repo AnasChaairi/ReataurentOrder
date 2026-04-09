@@ -7,7 +7,7 @@ services:
     container_name: restaurant_db
     restart: unless-stopped
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres/pgdata:/var/lib/postgresql/data
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
@@ -30,7 +30,7 @@ services:
     container_name: restaurant_redis
     restart: unless-stopped
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -49,20 +49,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
     container_name: restaurant_web
     restart: unless-stopped
-    command: >
-      sh -c "python manage.py collectstatic --noinput &&
-             python manage.py migrate --noinput &&
-             gunicorn restaurant_order.wsgi:application
-             --bind 0.0.0.0:8000
-             --workers 3
-             --timeout 120
-             --access-logfile -
-             --error-logfile -"
+    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn restaurant_order.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile - --error-logfile -"
     volumes:
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      - ./data/static:/app/staticfiles
+      - ./data/media:/app/media
+      - ./data/logs:/app/logs
     environment:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY}
@@ -80,6 +74,7 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - ENVIRONMENT=production
+      - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
     depends_on:
       db:
         condition: service_healthy
@@ -97,9 +92,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
     container_name: restaurant_daphne
     restart: unless-stopped
     command: daphne -b 0.0.0.0 -p 8001 restaurant_order.asgi:application
+    volumes:
+      - ./data/logs:/app/logs
     environment:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY}
@@ -129,9 +127,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
     container_name: restaurant_celery
     restart: unless-stopped
     command: celery -A restaurant_order worker -l info --concurrency=2
+    volumes:
+      - ./data/logs:/app/logs
     environment:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY}
@@ -161,9 +162,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: host
     container_name: restaurant_celery_beat
     restart: unless-stopped
     command: celery -A restaurant_order beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ./data/logs:/app/logs
     environment:
       - DEBUG=False
       - SECRET_KEY=${SECRET_KEY}
@@ -193,6 +197,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      network: host
     container_name: restaurant_frontend
     restart: unless-stopped
     environment:
@@ -216,8 +221,8 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - static_volume:/app/staticfiles:ro
-      - media_volume:/app/media:ro
+      - ./data/static:/app/staticfiles:ro
+      - ./data/media:/app/media:ro
       # Uncomment for SSL:
       # - ./certbot/conf:/etc/letsencrypt:ro
       # - ./certbot/www:/var/www/certbot:ro
@@ -235,9 +240,3 @@ services:
 networks:
   restaurant_network:
     driver: bridge
-
-volumes:
-  postgres_data:
-  redis_data:
-  static_volume:
-  media_volume:

@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 from decimal import Decimal
@@ -191,32 +191,49 @@ class Order(models.Model):
         self.save()
 
     def update_status(self, new_status, user=None):
-        """Update order status with timestamp"""
-        old_status = self.status
-        self.status = new_status
+        """Update order status with timestamp.
 
-        # Update corresponding timestamp
-        now = timezone.now()
-        if new_status == 'CONFIRMED':
-            self.confirmed_at = now
-        elif new_status == 'PREPARING':
-            self.preparing_at = now
-        elif new_status == 'READY':
-            self.ready_at = now
-        elif new_status == 'SERVED':
-            self.served_at = now
-        elif new_status == 'CANCELLED':
-            self.cancelled_at = now
+        Uses select_for_update() inside an atomic block to prevent two concurrent
+        requests (e.g. two waiters tapping "Confirm") from both succeeding on the
+        same PENDING order.
+        """
+        with transaction.atomic():
+            # Re-fetch with a row-level lock so concurrent callers queue up here.
+            locked = Order.objects.select_for_update().get(pk=self.pk)
+            old_status = locked.status
 
-        self.save()
+            if locked.status == new_status:
+                # Already transitioned — nothing to do (idempotent).
+                self.status = new_status
+                return
 
-        # Create event log
-        OrderEvent.objects.create(
-            order=self,
-            event_type='STATUS_CHANGE',
-            actor=user,
-            description=f'Status changed from {old_status} to {new_status}'
-        )
+            locked.status = new_status
+
+            # Update corresponding timestamp
+            now = timezone.now()
+            if new_status == 'CONFIRMED':
+                locked.confirmed_at = now
+            elif new_status == 'PREPARING':
+                locked.preparing_at = now
+            elif new_status == 'READY':
+                locked.ready_at = now
+            elif new_status == 'SERVED':
+                locked.served_at = now
+            elif new_status == 'CANCELLED':
+                locked.cancelled_at = now
+
+            locked.save()
+
+            # Keep the in-memory instance consistent
+            self.status = new_status
+
+            # Create event log
+            OrderEvent.objects.create(
+                order=self,
+                event_type='STATUS_CHANGE',
+                actor=user,
+                description=f'Status changed from {old_status} to {new_status}',
+            )
 
     def can_cancel(self):
         """Check if order can be cancelled"""
