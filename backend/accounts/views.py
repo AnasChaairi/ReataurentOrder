@@ -362,3 +362,153 @@ class AdminUserViewSet(viewsets.ModelViewSet):
             {'message': f'User {user.email} has been deactivated.'},
             status=status.HTTP_200_OK
         )
+
+
+# ---------------------------------------------------------------------------
+# Device authentication views
+# ---------------------------------------------------------------------------
+
+DEVICE_TOKEN_COOKIE = 'device_token'
+_DEVICE_TOKEN_LIFETIME_SECONDS = 12 * 60 * 60  # 12 hours
+
+
+class DeviceLoginView(generics.GenericAPIView):
+    """
+    POST /api/auth/device-login/
+    Authenticate a tablet device with device_id + passcode.
+    Sets a device_token httpOnly cookie on success.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        import jwt
+        import time
+        from django.conf import settings as django_settings
+        from django.utils import timezone
+        from devices.models import DeviceProfile
+
+        device_id = request.data.get('device_id', '').strip().upper()
+        passcode = request.data.get('passcode', '').strip()
+
+        if not device_id or not passcode:
+            return Response(
+                {'error': 'device_id and passcode are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            device = DeviceProfile.objects.select_related(
+                'restaurant', 'restaurant__odoo_config',
+                'odoo_config', 'table',
+            ).prefetch_related('allowed_categories').get(
+                device_id=device_id,
+                is_active=True,
+            )
+        except DeviceProfile.DoesNotExist:
+            return Response(
+                {'error': 'Invalid device ID or passcode.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not device.check_passcode(passcode):
+            return Response(
+                {'error': 'Invalid device ID or passcode.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Update last_seen
+        device.last_seen_at = timezone.now()
+        device.save(update_fields=['last_seen_at'])
+
+        # Build JWT payload
+        effective_config = device.effective_odoo_config
+        allowed_ids = list(device.allowed_categories.values_list('id', flat=True))
+        now = int(time.time())
+        payload = {
+            'type': 'device',
+            'device_id': device.device_id,
+            'device_pk': device.pk,
+            'restaurant_id': device.restaurant_id,
+            'table_id': device.table_id,
+            'allowed_category_ids': allowed_ids,
+            'odoo_config_id': effective_config.id if effective_config else None,
+            'iat': now,
+            'exp': now + _DEVICE_TOKEN_LIFETIME_SECONDS,
+        }
+        token = jwt.encode(payload, django_settings.SECRET_KEY, algorithm='HS256')
+
+        config = {
+            'device_id': device.device_id,
+            'device_name': device.name,
+            'restaurant_id': device.restaurant_id,
+            'restaurant_name': device.restaurant.name,
+            'table_id': device.table_id,
+            'table_number': device.table.number if device.table else None,
+            'allowed_category_ids': allowed_ids,
+            'odoo_config_id': effective_config.id if effective_config else None,
+        }
+
+        secure = not django_settings.DEBUG
+        response = Response({'config': config}, status=status.HTTP_200_OK)
+        response.set_cookie(
+            DEVICE_TOKEN_COOKIE,
+            token,
+            httponly=True,
+            secure=secure,
+            samesite='Lax',
+            max_age=_DEVICE_TOKEN_LIFETIME_SECONDS,
+            path='/',
+        )
+        return response
+
+
+class DeviceLogoutView(generics.GenericAPIView):
+    """
+    POST /api/auth/device-logout/
+    Clears the device_token cookie.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        response = Response({'message': 'Device logged out.'}, status=status.HTTP_200_OK)
+        response.delete_cookie(DEVICE_TOKEN_COOKIE, path='/')
+        return response
+
+
+class DeviceStatusView(generics.GenericAPIView):
+    """
+    GET /api/auth/device-status/
+    Decodes the device_token cookie without a DB query and returns the config.
+    Used by DeviceContext on mount to rehydrate the session.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        import jwt
+        from django.conf import settings as django_settings
+
+        raw = request.COOKIES.get(DEVICE_TOKEN_COOKIE)
+        if not raw:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            payload = jwt.decode(raw, django_settings.SECRET_KEY, algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        if payload.get('type') != 'device':
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        return Response({
+            'config': {
+                'device_id': payload['device_id'],
+                'device_name': payload.get('device_name', ''),
+                'restaurant_id': payload['restaurant_id'],
+                'restaurant_name': payload.get('restaurant_name', ''),
+                'table_id': payload.get('table_id'),
+                'table_number': payload.get('table_number'),
+                'allowed_category_ids': payload.get('allowed_category_ids', []),
+                'odoo_config_id': payload.get('odoo_config_id'),
+            }
+        })

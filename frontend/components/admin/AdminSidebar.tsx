@@ -53,6 +53,12 @@ export function AdminSidebar() {
       adminOnly: true,
     },
     {
+      name: "Devices",
+      href: "/admin/devices",
+      icon: "📱",
+      adminOnly: true,
+    },
+    {
       name: "Odoo Settings",
       href: "/admin/odoo-settings",
       icon: "⚙️",

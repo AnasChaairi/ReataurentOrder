@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/admin/', include('analytics.urls')),
     path('api/odoo/', include('odoo_integration.urls')),
     path('api/', include('restaurants.urls')),
+    path('api/devices/', include('devices.urls')),
 ]
 
 # Serve media files in development

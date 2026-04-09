@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'odoo_integration',
     'notifications',
     'analytics',
+    'devices',
 ]
 
 MIDDLEWARE = [
@@ -179,6 +180,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'accounts.authentication.CookieJWTAuthentication',
+        'devices.authentication.DeviceTokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',

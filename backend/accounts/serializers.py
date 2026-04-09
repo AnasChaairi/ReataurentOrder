@@ -27,6 +27,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
 
+        # Only ADMIN and RESTAURANT_OWNER may use email/password login.
+        # Waiters and Customers must use device login or cannot log in at all.
+        allowed_roles = (User.Role.ADMIN, User.Role.RESTAURANT_OWNER)
+        if self.user.role not in allowed_roles:
+            raise serializers.ValidationError(
+                'Only admin users can log in here. Use device login for tablet access.'
+            )
+
         # Add extra user info to response
         user_data = {
             'id': self.user.id,

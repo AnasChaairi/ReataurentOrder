@@ -24,6 +24,19 @@ from .import_export import MenuExporter, MenuImporter
 from django.http import HttpResponse
 
 
+def _get_device_context(request):
+    """
+    Returns (is_device, allowed_category_ids, restaurant_id) from the device
+    token if the request is authenticated via DeviceTokenAuthentication.
+    Returns (False, [], None) for regular user requests.
+    """
+    from devices.authentication import AnonymousDevice
+    if isinstance(request.user, AnonymousDevice):
+        token = request.auth
+        return True, token.allowed_category_ids, token.restaurant_id
+    return False, [], None
+
+
 class CategoryViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     """
     ViewSet for Category CRUD operations
@@ -55,6 +68,18 @@ class CategoryViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         # Apply restaurant scoping for authenticated users
         queryset = self.get_restaurant_queryset(queryset)
 
+        # Device token: scope to device's restaurant and allowed categories
+        is_device, allowed_ids, device_restaurant_id = _get_device_context(self.request)
+        if is_device:
+            queryset = queryset.filter(
+                restaurant_id=device_restaurant_id,
+                is_active=True,
+                restaurant__isnull=False,
+            )
+            if allowed_ids:
+                queryset = queryset.filter(id__in=allowed_ids)
+            return queryset
+
         # Non-admin users only see active categories with a restaurant
         if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):
             queryset = queryset.filter(is_active=True, restaurant__isnull=False)
@@ -85,18 +110,18 @@ class CategoryViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         return CategorySerializer
 
     def list(self, request, *args, **kwargs):
-        """List categories with caching"""
-        # Try to get from cache
-        cached_data = MenuCache.get_category_list(user=request.user)
-        if cached_data is not None:
-            return Response(cached_data)
+        """List categories with caching. Device requests bypass cache to avoid cross-device bleed."""
+        is_device, _, _ = _get_device_context(request)
+        if not is_device:
+            cached_data = MenuCache.get_category_list(user=request.user)
+            if cached_data is not None:
+                return Response(cached_data)
 
-        # If not in cache, get from database
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
 
-        # Cache the result
-        MenuCache.set_category_list(serializer.data, user=request.user)
+        if not is_device:
+            MenuCache.set_category_list(serializer.data, user=request.user)
 
         return Response(serializer.data)
 
@@ -157,6 +182,19 @@ class MenuItemViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
 
         # Apply restaurant scoping for authenticated users
         queryset = self.get_restaurant_queryset(queryset)
+
+        # Device token: scope to device's restaurant and allowed categories
+        is_device, allowed_ids, device_restaurant_id = _get_device_context(self.request)
+        if is_device:
+            queryset = queryset.filter(
+                restaurant_id=device_restaurant_id,
+                is_available=True,
+                category__is_active=True,
+                restaurant__isnull=False,
+            )
+            if allowed_ids:
+                queryset = queryset.filter(category_id__in=allowed_ids)
+            return queryset
 
         # Non-admin users only see available items in active categories, with a restaurant
         if not self.request.user.is_authenticated or not getattr(self.request.user, 'is_admin', False):

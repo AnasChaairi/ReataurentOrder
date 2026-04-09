@@ -40,9 +40,27 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def get_serializer_class(self):
+        """Use appropriate serializer based on action"""
+        if self.action == 'list':
+            return OrderListSerializer
+        elif self.action == 'create':
+            return OrderCreateSerializer
+        return OrderSerializer
+
+    def get_throttles(self):
+        if self.action == 'create':
+            return [OrderCreateRateThrottle()]
+        return super().get_throttles()
+
     def get_queryset(self):
         """Filter orders based on user role"""
         user = self.request.user
+
+        # Device tokens don't own orders; return none for listing
+        from devices.authentication import AnonymousDevice
+        if isinstance(user, AnonymousDevice):
+            return Order.objects.none()
 
         if not user.is_authenticated:
             return Order.objects.none()
@@ -61,22 +79,20 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
 
         return queryset
 
-    def get_serializer_class(self):
-        """Use appropriate serializer based on action"""
-        if self.action == 'list':
-            return OrderListSerializer
-        elif self.action == 'create':
-            return OrderCreateSerializer
-        return OrderSerializer
-
-    def get_throttles(self):
-        if self.action == 'create':
-            return [OrderCreateRateThrottle()]
-        return super().get_throttles()
-
     def create(self, request, *args, **kwargs):
         """Create order and dispatch async Odoo sync via Celery."""
-        serializer = self.get_serializer(data=request.data)
+        from devices.authentication import AnonymousDevice
+
+        # Inject table and restaurant from device token if not in request body
+        data = request.data.copy()
+        if isinstance(request.user, AnonymousDevice):
+            token = request.auth
+            if 'table' not in data and token.table_id:
+                data['table'] = token.table_id
+            if 'restaurant' not in data:
+                data['restaurant'] = token.restaurant_id
+
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
 

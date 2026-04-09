@@ -71,7 +71,7 @@ class AuthService {
 
   async checkAuthStatus(): Promise<User | null> {
     try {
-      const response = await api.get<{ user: User }>('/api/auth/me/');
+      const response = await api.get<{ user: User }>('/api/auth/me/', { silent: true });
       return response.data.user;
     } catch {
       return null;

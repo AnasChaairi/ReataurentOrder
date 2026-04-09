@@ -10,6 +10,9 @@ from .views import (
     ChangePasswordView,
     LogoutView,
     AdminUserViewSet,
+    DeviceLoginView,
+    DeviceLogoutView,
+    DeviceStatusView,
 )
 
 app_name = 'accounts'
@@ -30,6 +33,11 @@ urlpatterns = [
     path('profile/', UserProfileView.as_view(), name='profile'),
     path('profile/update/', UserProfileUpdateView.as_view(), name='profile-update'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
+
+    # Device authentication
+    path('device-login/', DeviceLoginView.as_view(), name='device-login'),
+    path('device-logout/', DeviceLogoutView.as_view(), name='device-logout'),
+    path('device-status/', DeviceStatusView.as_view(), name='device-status'),
 
     # Admin user management
     path('', include(router.urls)),
