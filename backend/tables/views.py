@@ -20,7 +20,7 @@ class TableViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
     queryset = Table.objects.all()
     permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['section', 'status', 'floor', 'is_active']
+    filterset_fields = ['section', 'status', 'floor', 'is_active', 'restaurant']
     search_fields = ['number', 'notes']
     ordering = ['section', 'number']
 
@@ -29,6 +29,10 @@ class TableViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         queryset = self.get_restaurant_queryset(queryset)
         if not self.request.user.is_admin:
             queryset = queryset.filter(is_active=True)
+        # Support filtering by odoo_config (resolves via restaurant FK)
+        odoo_config_id = self.request.query_params.get('odoo_config')
+        if odoo_config_id:
+            queryset = queryset.filter(restaurant__odoo_config_id=odoo_config_id)
         return queryset
 
     def get_serializer_class(self):

@@ -18,6 +18,21 @@ from channels.db import database_sync_to_async
 
 
 @database_sync_to_async
+def _get_device_from_token(raw_token: str):
+    """Validate a device JWT and return an AnonymousDevice or AnonymousUser."""
+    try:
+        import jwt
+        from django.conf import settings
+        from devices.authentication import AnonymousDevice, DeviceToken
+        payload = jwt.decode(raw_token, settings.SECRET_KEY, algorithms=['HS256'])
+        if payload.get('type') != 'device':
+            return AnonymousUser()
+        return AnonymousDevice(DeviceToken(payload))
+    except Exception:
+        return AnonymousUser()
+
+
+@database_sync_to_async
 def _get_user_from_token(raw_token: str):
     """Validate a JWT access token and return the corresponding User or AnonymousUser."""
     from rest_framework_simplejwt.tokens import AccessToken
@@ -60,6 +75,17 @@ class JWTCookieAuthMiddleware(BaseMiddleware):
         if raw_token:
             scope['user'] = await _get_user_from_token(raw_token)
         else:
-            scope['user'] = AnonymousUser()
+            # Fall back to device_token cookie for tablet sessions
+            device_token = None
+            for part in cookie_header.split(';'):
+                part = part.strip()
+                if part.startswith('device_token='):
+                    device_token = part[len('device_token='):]
+                    break
+
+            if device_token:
+                scope['user'] = await _get_device_from_token(device_token)
+            else:
+                scope['user'] = AnonymousUser()
 
         return await super().__call__(scope, receive, send)

@@ -69,6 +69,8 @@ class OdooConfigListSerializer(serializers.ModelSerializer):
     """
 
     status = serializers.SerializerMethodField()
+    restaurant_id = serializers.SerializerMethodField()
+    restaurant_name = serializers.SerializerMethodField()
 
     class Meta:
         model = OdooConfig
@@ -78,10 +80,13 @@ class OdooConfigListSerializer(serializers.ModelSerializer):
             'is_active',
             'url',
             'database',
+            'pos_config_id',
             'pos_config_name',
             'status',
             'last_test_success',
             'last_test_at',
+            'restaurant_id',
+            'restaurant_name',
         ]
 
     def get_status(self, obj):
@@ -92,6 +97,16 @@ class OdooConfigListSerializer(serializers.ModelSerializer):
             return 'connected'
         else:
             return 'error'
+
+    def get_restaurant_id(self, obj):
+        from restaurants.models import Restaurant
+        r = Restaurant.objects.filter(odoo_config=obj).first()
+        return r.id if r else None
+
+    def get_restaurant_name(self, obj):
+        from restaurants.models import Restaurant
+        r = Restaurant.objects.filter(odoo_config=obj).first()
+        return r.name if r else None
 
 
 class OdooSyncLogSerializer(serializers.ModelSerializer):

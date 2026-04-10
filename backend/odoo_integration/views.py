@@ -251,9 +251,20 @@ class OdooConfigViewSet(viewsets.ModelViewSet):
 
         try:
             from .django_services import OdooTableSyncService
+            from restaurants.models import Restaurant
+
+            # Resolve the restaurant linked to this Odoo config
+            restaurant = Restaurant.objects.filter(odoo_config=config).first()
+            if not restaurant:
+                return Response({
+                    'error': (
+                        f"No restaurant is linked to Odoo config '{config.name}'. "
+                        "Go to Restaurants → edit the restaurant → assign this Odoo config, then retry."
+                    )
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             service = OdooTableSyncService(config)
-            result = service.sync_tables_from_odoo(user=request.user)
+            result = service.sync_tables_from_odoo(user=request.user, restaurant=restaurant)
 
             logger.info(f"Table sync completed: {result}")
 

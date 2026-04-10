@@ -64,6 +64,8 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,141.94.225.228}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://141.94.225.228:3000}
     depends_on:
       db:
         condition: service_healthy
@@ -155,6 +157,8 @@ services:
       - DB_PORT=5432
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,141.94.225.228}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://141.94.225.228:3000}
     depends_on:
       - db
       - redis

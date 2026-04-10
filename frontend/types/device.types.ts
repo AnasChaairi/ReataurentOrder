@@ -28,7 +28,7 @@ export interface DeviceProfile {
 
 export interface DeviceProfileFormData {
   name: string;
-  restaurant: number | '';
+  restaurant?: number | '';
   table: number | '';
   odoo_config: number | '';
   allowed_category_ids: number[];

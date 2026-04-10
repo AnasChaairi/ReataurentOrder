@@ -44,8 +44,10 @@ class OrderNotificationConsumer(AsyncJsonWebsocketConsumer):
         self.target_id = self.scope['url_route']['kwargs'].get('id', '')
         role = _user_role(self.scope)
         uid = _user_id(self.scope)
+        is_device = getattr(self.scope.get('user'), 'is_device', False)
 
         if self.notification_type == 'table':
+            # Allow both regular users and device sessions to subscribe to table updates
             self.group_name = f'table_{self.target_id}'
 
         elif self.notification_type == 'kitchen':

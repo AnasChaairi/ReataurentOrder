@@ -30,7 +30,7 @@ class RestaurantListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Restaurant
-        fields = ['id', 'name', 'slug', 'owner', 'owner_name', 'is_active', 'created_at']
+        fields = ['id', 'name', 'slug', 'owner', 'owner_name', 'odoo_config', 'is_active', 'created_at']
 
     def get_owner_name(self, obj):
         return obj.owner.get_full_name() if obj.owner else None

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from menu.models import Category
 from .models import DeviceProfile
+from restaurants.models import Restaurant
 
 
 class DeviceProfileSerializer(serializers.ModelSerializer):
@@ -52,6 +53,26 @@ class DeviceProfileCreateSerializer(serializers.ModelSerializer):
             'name', 'restaurant', 'table', 'odoo_config',
             'allowed_category_ids', 'passcode', 'is_active',
         ]
+        extra_kwargs = {
+            'restaurant': {'required': False, 'allow_null': True},
+        }
+
+    def validate(self, attrs):
+        # Auto-derive restaurant from odoo_config when not explicitly provided
+        odoo_config = attrs.get('odoo_config')
+        if odoo_config and not attrs.get('restaurant'):
+            restaurant = Restaurant.objects.filter(odoo_config=odoo_config).first()
+            if restaurant:
+                attrs['restaurant'] = restaurant
+            else:
+                raise serializers.ValidationError(
+                    {'odoo_config': 'No restaurant is linked to this Odoo configuration.'}
+                )
+        if not attrs.get('restaurant'):
+            raise serializers.ValidationError(
+                {'restaurant': 'Either provide a restaurant or an Odoo config linked to one.'}
+            )
+        return attrs
 
     def validate_passcode(self, value):
         if not value.isdigit():
