@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Search, X } from "lucide-react";
 import { menuService } from "@/services/menu.service";
 import { Category, MenuItemListItem, MenuItem } from "@/types/menu.types";
 import { MenuItemCard } from "@/components/ui/MenuItemCard";
@@ -12,6 +13,8 @@ export function TabletMenuGrid() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItemListItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,19 +38,34 @@ export function TabletMenuGrid() {
     fetchCategories();
   }, []);
 
-  // Fetch menu items when category changes
+  // Debounce the search input so each keystroke doesn't hit the API
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  // Fetch menu items when category or search changes
   useEffect(() => {
     const fetchMenuItems = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const params: any = {
+        const params: {
+          page_size: number;
+          category?: number;
+          search?: string;
+        } = {
           page_size: 50, // Get more items for tablet view
         };
 
         if (activeCategory) {
           params.category = activeCategory;
+        }
+        if (searchQuery) {
+          params.search = searchQuery;
         }
 
         const response = await menuService.getMenuItems(params);
@@ -61,7 +79,7 @@ export function TabletMenuGrid() {
     };
 
     fetchMenuItems();
-  }, [activeCategory]);
+  }, [activeCategory, searchQuery]);
 
   const handleCategoryChange = (categoryId: number | null) => {
     setActiveCategory(categoryId);
@@ -147,8 +165,34 @@ export function TabletMenuGrid() {
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      {/* Category Tabs */}
-      <div className="bg-baristas-cream px-4 py-4 border-b border-baristas-brown/10">
+      {/* Search + Category Tabs */}
+      <div className="bg-baristas-cream px-4 pt-4 pb-4 border-b border-baristas-brown/10 space-y-3">
+        <div className="relative max-w-2xl mx-auto">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-baristas-brown/60" />
+          </div>
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search menu…"
+            className="block w-full pl-12 pr-12 py-3 rounded-xl bg-white border border-baristas-brown/15 text-baristas-brown-dark placeholder-baristas-brown/50 focus:outline-none focus:ring-2 focus:ring-baristas-brown focus:border-transparent text-base shadow-sm"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => setSearchInput("")}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-baristas-brown/60 hover:text-baristas-brown"
+              aria-label="Clear search"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
         <div className="tablet-category-tabs">
           <button
             onClick={() => handleCategoryChange(null)}
@@ -216,9 +260,21 @@ export function TabletMenuGrid() {
 
         {!isLoading && !error && menuItems.length === 0 && (
           <div className="flex items-center justify-center py-20">
-            <p className="text-baristas-brown-dark text-lg">
-              No items available in this category.
-            </p>
+            <div className="text-center">
+              <p className="text-baristas-brown-dark text-lg mb-2">
+                {searchQuery
+                  ? `No items match “${searchQuery}”.`
+                  : "No items available in this category."}
+              </p>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchInput("")}
+                  className="text-baristas-brown underline text-sm"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

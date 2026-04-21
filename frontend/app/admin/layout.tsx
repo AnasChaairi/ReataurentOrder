@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { AdminNotificationBell } from "@/components/admin/AdminNotificationBell";
 import { useAdmin } from "@/hooks/useAdmin";
 
 export default function AdminLayout({
@@ -30,7 +31,12 @@ export default function AdminLayout({
   return (
     <div className="flex min-h-screen bg-gray-50">
       <AdminSidebar />
-      <main className="flex-1 p-8">{children}</main>
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="sticky top-0 z-30 h-14 px-6 flex items-center justify-end gap-3 bg-[#2D1810] text-white border-b border-black/20">
+          <AdminNotificationBell />
+        </header>
+        <main className="flex-1 p-8">{children}</main>
+      </div>
     </div>
   );
 }

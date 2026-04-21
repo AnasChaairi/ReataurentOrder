@@ -79,15 +79,18 @@ class OrderSerializer(serializers.ModelSerializer):
     table_number = serializers.CharField(source='table.number', read_only=True)
     customer_name = serializers.SerializerMethodField()
     waiter_name = serializers.SerializerMethodField()
+    device_id_label = serializers.CharField(source='device.device_id', read_only=True)
+    device_name = serializers.CharField(source='device.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     can_cancel = serializers.BooleanField(read_only=True)
     can_modify = serializers.BooleanField(read_only=True)
-    
+
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'table', 'table_number', 'session',
             'customer', 'customer_name', 'waiter', 'waiter_name',
+            'device', 'device_id_label', 'device_name',
             'status', 'status_display', 'items',
             'subtotal', 'tax', 'discount', 'total_amount',
             'customer_notes', 'waiter_notes', 'kitchen_notes',

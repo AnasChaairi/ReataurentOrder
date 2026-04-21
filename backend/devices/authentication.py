@@ -63,6 +63,11 @@ class AnonymousDevice:
         self.device_token = device_token
 
     @property
+    def pk(self):
+        # Required by DRF throttling (UserRateThrottle.get_cache_key reads user.pk).
+        return f'device:{self.device_token.device_pk}'
+
+    @property
     def restaurant_id(self):
         return self.device_token.restaurant_id
 

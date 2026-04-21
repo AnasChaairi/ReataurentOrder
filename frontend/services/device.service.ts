@@ -1,19 +1,34 @@
 import api from '@/lib/api';
-import { DeviceConfig, DeviceProfile, DeviceProfileFormData } from '@/types/device.types';
+import { DeviceConfig, DeviceProfile, DeviceProfileFormData, DeviceTableOption } from '@/types/device.types';
 
 class DeviceService {
   // ── Tablet authentication ──────────────────────────────────────────────
 
-  async login(deviceId: string, passcode: string): Promise<{ config: DeviceConfig }> {
+  async login(deviceId: string, tableNumber: string): Promise<{ config: DeviceConfig }> {
     const res = await api.post<{ config: DeviceConfig }>('/api/auth/device-login/', {
       device_id: deviceId.toUpperCase(),
-      passcode,
+      table_number: tableNumber,
     });
     return res.data;
   }
 
   async logout(): Promise<void> {
     await api.post('/api/auth/device-logout/');
+  }
+
+  async listTablesForDevice(
+    deviceId: string,
+    options: { sync?: boolean } = {},
+  ): Promise<DeviceTableOption[]> {
+    const params: Record<string, string> = {
+      device_id: deviceId.toUpperCase(),
+    };
+    if (options.sync) params.sync = 'true';
+    const res = await api.get<{ tables: DeviceTableOption[] }>(
+      '/api/auth/device-tables/',
+      { params, silent: true },
+    );
+    return res.data.tables;
   }
 
   /** Decodes the device_token cookie server-side without a DB query.

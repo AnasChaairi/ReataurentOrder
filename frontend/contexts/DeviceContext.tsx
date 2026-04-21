@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { deviceService } from '@/services/device.service';
+import { cartService } from '@/services/cart.service';
 import { DeviceConfig, DeviceContextType } from '@/types/device.types';
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -19,14 +20,18 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = async (deviceId: string, passcode: string): Promise<void> => {
-    const result = await deviceService.login(deviceId, passcode);
+  const login = async (deviceId: string, tableNumber: string): Promise<void> => {
+    const result = await deviceService.login(deviceId, tableNumber);
     setConfig(result.config);
   };
 
   const logout = async (): Promise<void> => {
+    const currentDeviceId = config?.device_id;
     await deviceService.logout();
     setConfig(null);
+    if (currentDeviceId) {
+      cartService.clearCart(cartService.deviceCartKey(currentDeviceId));
+    }
   };
 
   return (

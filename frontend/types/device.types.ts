@@ -1,3 +1,9 @@
+export interface DeviceTableOption {
+  id: number;
+  number: string;
+  section: string;
+}
+
 export interface DeviceConfig {
   device_id: string;
   device_name: string;
@@ -32,7 +38,7 @@ export interface DeviceProfileFormData {
   table: number | '';
   odoo_config: number | '';
   allowed_category_ids: number[];
-  passcode: string;
+  passcode?: string;
   is_active: boolean;
 }
 
@@ -40,6 +46,6 @@ export interface DeviceContextType {
   config: DeviceConfig | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (deviceId: string, passcode: string) => Promise<void>;
+  login: (deviceId: string, tableNumber: string) => Promise<void>;
   logout: () => Promise<void>;
 }

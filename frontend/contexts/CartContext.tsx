@@ -9,6 +9,7 @@ export const CartContext = createContext<CartContextType | undefined>(undefined)
 
 interface CartProviderProps {
   children: ReactNode;
+  storageKey?: string;
 }
 
 const EMPTY_CART: Cart = {
@@ -20,26 +21,25 @@ const EMPTY_CART: Cart = {
   item_count: 0,
 };
 
-export function CartProvider({ children }: CartProviderProps) {
+export function CartProvider({ children, storageKey }: CartProviderProps) {
   // Always start with an empty cart so SSR and initial client render match.
   // localStorage is only read inside useEffect (client-only).
   const [cart, setCart] = useState<Cart>(EMPTY_CART);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Load cart from localStorage after mount (client-only)
+  // Reload cart when the storage key changes (e.g. switching device sessions)
   useEffect(() => {
-    const stored = cartService.getCart();
-    if (stored.items.length > 0) {
-      setCart(stored);
-    }
-  }, []);
+    const stored = cartService.getCart(storageKey);
+    setCart(stored.items.length > 0 ? stored : EMPTY_CART);
+    setIsCartOpen(false);
+  }, [storageKey]);
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
     if (cart.items.length > 0) {
-      cartService.saveCart(cart.items);
+      cartService.saveCart(cart.items, storageKey);
     }
-  }, [cart]);
+  }, [cart, storageKey]);
 
   const addToCart = useCallback((item: Omit<CartItem, 'id' | 'unit_price' | 'total_price'>) => {
     const unitPrice = cartService.calculateUnitPrice(item);
@@ -105,8 +105,8 @@ export function CartProvider({ children }: CartProviderProps) {
   }, [removeFromCart]);
 
   const clearCart = useCallback(() => {
-    setCart(cartService.clearCart());
-  }, []);
+    setCart(cartService.clearCart(storageKey));
+  }, [storageKey]);
 
   const resetCart = useCallback(() => {
     setCart({

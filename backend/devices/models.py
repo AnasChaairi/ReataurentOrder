@@ -21,7 +21,12 @@ class DeviceProfile(models.Model):
         default=generate_device_id,
         help_text='Auto-generated short code shown on login screen',
     )
-    passcode_hash = models.CharField(max_length=128, help_text='Argon2-hashed 4-6 digit PIN')
+    passcode_hash = models.CharField(
+        max_length=128,
+        blank=True,
+        default='',
+        help_text='Legacy — unused since login switched to device_id + table_number.',
+    )
 
     # Ownership
     restaurant = models.ForeignKey(

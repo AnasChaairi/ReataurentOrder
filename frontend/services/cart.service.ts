@@ -4,16 +4,13 @@ const CART_STORAGE_KEY = 'restaurant_cart';
 const TAX_RATE = 0.10; // 10% tax
 
 class CartService {
-  /**
-   * Get cart from localStorage
-   */
-  getCart(): Cart {
+  getCart(storageKey: string = CART_STORAGE_KEY): Cart {
     if (typeof window === 'undefined') {
       return this.getEmptyCart();
     }
 
     try {
-      const cartJson = localStorage.getItem(CART_STORAGE_KEY);
+      const cartJson = localStorage.getItem(storageKey);
       if (!cartJson) {
         return this.getEmptyCart();
       }
@@ -26,12 +23,9 @@ class CartService {
     }
   }
 
-  /**
-   * Save cart to localStorage
-   */
-  saveCart(items: CartItem[]): Cart {
+  saveCart(items: CartItem[], storageKey: string = CART_STORAGE_KEY): Cart {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(storageKey, JSON.stringify(items));
     }
     return this.calculateCart(items);
   }
@@ -95,14 +89,15 @@ class CartService {
     return `${item.menuItem.id}-${variantId}-${addonIds}-${comboIds}-${instructions}`;
   }
 
-  /**
-   * Clear cart
-   */
-  clearCart(): Cart {
+  clearCart(storageKey: string = CART_STORAGE_KEY): Cart {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem(CART_STORAGE_KEY);
+      localStorage.removeItem(storageKey);
     }
     return this.getEmptyCart();
+  }
+
+  deviceCartKey(deviceId: string): string {
+    return `restaurant_cart:device:${deviceId}`;
   }
 
   /**

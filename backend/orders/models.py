@@ -58,6 +58,14 @@ class Order(models.Model):
         limit_choices_to={'role': 'WAITER'},
         help_text="Waiter assigned to this order"
     )
+    device = models.ForeignKey(
+        'devices.DeviceProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders',
+        help_text="Tablet/device that placed this order (null for non-device orders)"
+    )
 
     # Order details
     order_number = models.CharField(

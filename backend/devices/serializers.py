@@ -32,12 +32,15 @@ class DeviceProfileSerializer(serializers.ModelSerializer):
 
 
 class DeviceProfileCreateSerializer(serializers.ModelSerializer):
-    """Write serializer — accepts passcode plaintext, hashes on save."""
+    """Write serializer — passcode is legacy/unused; login now uses table_number.
+    Kept optional for backward compatibility with existing admin UI flows."""
     passcode = serializers.CharField(
         write_only=True,
+        required=False,
+        allow_blank=True,
         min_length=4,
         max_length=6,
-        help_text='4-6 digit numeric PIN',
+        help_text='4-6 digit numeric PIN (legacy — no longer used for login)',
     )
     allowed_category_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -75,15 +78,16 @@ class DeviceProfileCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_passcode(self, value):
-        if not value.isdigit():
+        if value and not value.isdigit():
             raise serializers.ValidationError('Passcode must contain digits only.')
         return value
 
     def create(self, validated_data):
-        passcode = validated_data.pop('passcode')
+        passcode = validated_data.pop('passcode', None)
         device = super().create(validated_data)
-        device.set_passcode(passcode)
-        device.save(update_fields=['passcode_hash'])
+        if passcode:
+            device.set_passcode(passcode)
+            device.save(update_fields=['passcode_hash'])
         return device
 
     def update(self, instance, validated_data):

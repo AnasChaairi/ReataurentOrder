@@ -96,6 +96,14 @@ class OrderViewSet(RestaurantScopedMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
 
+        # Stamp the device that placed this order so admin notifications can
+        # reference it.  Token carries device_pk directly — no extra query.
+        if isinstance(request.user, AnonymousDevice):
+            device_pk = getattr(request.auth, 'device_pk', None)
+            if device_pk:
+                order.device_id = device_pk
+                order.save(update_fields=['device'])
+
         # Dispatch Odoo sync asynchronously so the HTTP response is never blocked
         # by network latency or Odoo downtime.  The Celery task handles retries.
         try:

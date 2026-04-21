@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MenuItem {
   name: string;
@@ -14,6 +16,7 @@ interface MenuItem {
 export function AdminSidebar() {
   const pathname = usePathname();
   const { isAdmin, isOwner } = useAdmin();
+  const { logout } = useAuth();
 
   const allMenuItems: MenuItem[] = [
     {
@@ -97,7 +100,7 @@ export function AdminSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto pt-8">
+      <div className="mt-auto pt-8 space-y-1">
         <Link
           href="/"
           className="flex items-center space-x-3 px-4 py-3 text-gray-300 hover:text-white transition-colors"
@@ -105,6 +108,13 @@ export function AdminSidebar() {
           <span className="text-xl">🏠</span>
           <span>Back to Website</span>
         </Link>
+        <button
+          onClick={logout}
+          className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-[#3d2b20] hover:text-white transition-colors"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="font-medium">Sign out</span>
+        </button>
       </div>
     </aside>
   );

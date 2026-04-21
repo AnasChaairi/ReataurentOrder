@@ -6,15 +6,22 @@ from channels.layers import get_channel_layer
 logger = logging.getLogger(__name__)
 
 
-def _get_kitchen_group(order):
-    """Get the kitchen WebSocket group name for an order's restaurant."""
+def _get_kitchen_groups(order):
+    """Kitchen groups to notify for this order.
+
+    We broadcast to both the restaurant-scoped group (kitchen displays filter
+    by restaurant) and the global 'kitchen' group (admin panel bell). Clients
+    may subscribe to either depending on their UX needs.
+    """
+    groups = ['kitchen']
     if order.restaurant_id:
-        return f'restaurant_{order.restaurant_id}_kitchen'
-    return 'kitchen'
+        groups.append(f'restaurant_{order.restaurant_id}_kitchen')
+    return groups
 
 
 def _get_order_data(order):
     """Serialize order data for WebSocket messages."""
+    device = getattr(order, 'device', None)
     return {
         'id': order.id,
         'order_number': order.order_number,
@@ -22,6 +29,8 @@ def _get_order_data(order):
         'table_id': order.table_id,
         'table_number': order.table.number,
         'restaurant_id': order.restaurant_id,
+        'device_id': device.device_id if device else None,
+        'device_name': device.name if device else None,
         'total_amount': str(order.total_amount),
         'items_count': order.items.count(),
         'items': [
@@ -45,14 +54,13 @@ def notify_order_created(order):
 
     order_data = _get_order_data(order)
 
-    # Notify kitchen (restaurant-scoped)
-    async_to_sync(channel_layer.group_send)(
-        _get_kitchen_group(order),
-        {
-            'type': 'order_created',
-            'order': order_data,
-        },
-    )
+    # Notify kitchen — both global (admin bell) and restaurant-scoped groups
+    message = {
+        'type': 'order_created',
+        'order': order_data,
+    }
+    for group in _get_kitchen_groups(order):
+        async_to_sync(channel_layer.group_send)(group, message)
 
     # Notify assigned waiter
     if order.waiter_id:
@@ -88,11 +96,9 @@ def notify_order_status_change(order, old_status, new_status):
         message,
     )
 
-    # Notify kitchen (restaurant-scoped)
-    async_to_sync(channel_layer.group_send)(
-        _get_kitchen_group(order),
-        message,
-    )
+    # Notify kitchen — global + restaurant-scoped
+    for group in _get_kitchen_groups(order):
+        async_to_sync(channel_layer.group_send)(group, message)
 
     # Notify assigned waiter
     if order.waiter_id:
@@ -121,15 +127,13 @@ def notify_order_cancelled(order, reason=''):
         'reason': reason,
     }
 
-    # Notify table, kitchen (restaurant-scoped), and waiter
+    # Notify table, kitchen (global + restaurant-scoped), and waiter
     async_to_sync(channel_layer.group_send)(
         f'table_{order.table_id}',
         message,
     )
-    async_to_sync(channel_layer.group_send)(
-        _get_kitchen_group(order),
-        message,
-    )
+    for group in _get_kitchen_groups(order):
+        async_to_sync(channel_layer.group_send)(group, message)
     if order.waiter_id:
         async_to_sync(channel_layer.group_send)(
             f'waiter_{order.waiter_id}',

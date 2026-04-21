@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,6 +9,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
+
+logger = logging.getLogger(__name__)
 
 from .serializers import (
     CustomTokenObtainPairSerializer,
@@ -375,7 +379,8 @@ _DEVICE_TOKEN_LIFETIME_SECONDS = 12 * 60 * 60  # 12 hours
 class DeviceLoginView(generics.GenericAPIView):
     """
     POST /api/auth/device-login/
-    Authenticate a tablet device with device_id + passcode.
+    Authenticate a tablet device with device_id + table_number.
+    The table must belong to the same restaurant as the device.
     Sets a device_token httpOnly cookie on success.
     """
     permission_classes = [AllowAny]
@@ -387,33 +392,38 @@ class DeviceLoginView(generics.GenericAPIView):
         from django.conf import settings as django_settings
         from django.utils import timezone
         from devices.models import DeviceProfile
+        from tables.models import Table
 
         device_id = request.data.get('device_id', '').strip().upper()
-        passcode = request.data.get('passcode', '').strip()
+        table_number = str(request.data.get('table_number', '')).strip()
 
-        if not device_id or not passcode:
+        if not device_id or not table_number:
             return Response(
-                {'error': 'device_id and passcode are required.'},
+                {'error': 'device_id and table_number are required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
             device = DeviceProfile.objects.select_related(
-                'restaurant', 'restaurant__odoo_config',
-                'odoo_config', 'table',
+                'restaurant', 'restaurant__odoo_config', 'odoo_config',
             ).prefetch_related('allowed_categories').get(
                 device_id=device_id,
                 is_active=True,
             )
         except DeviceProfile.DoesNotExist:
             return Response(
-                {'error': 'Invalid device ID or passcode.'},
+                {'error': 'Invalid device ID or table number.'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if not device.check_passcode(passcode):
+        try:
+            table = Table.objects.get(
+                restaurant_id=device.restaurant_id,
+                number=table_number,
+            )
+        except Table.DoesNotExist:
             return Response(
-                {'error': 'Invalid device ID or passcode.'},
+                {'error': 'Invalid device ID or table number.'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
@@ -430,7 +440,7 @@ class DeviceLoginView(generics.GenericAPIView):
             'device_id': device.device_id,
             'device_pk': device.pk,
             'restaurant_id': device.restaurant_id,
-            'table_id': device.table_id,
+            'table_id': table.id,
             'allowed_category_ids': allowed_ids,
             'odoo_config_id': effective_config.id if effective_config else None,
             'iat': now,
@@ -443,8 +453,8 @@ class DeviceLoginView(generics.GenericAPIView):
             'device_name': device.name,
             'restaurant_id': device.restaurant_id,
             'restaurant_name': device.restaurant.name,
-            'table_id': device.table_id,
-            'table_number': device.table.number if device.table else None,
+            'table_id': table.id,
+            'table_number': table.number,
             'allowed_category_ids': allowed_ids,
             'odoo_config_id': effective_config.id if effective_config else None,
         }
@@ -461,6 +471,74 @@ class DeviceLoginView(generics.GenericAPIView):
             path='/',
         )
         return response
+
+
+class DeviceTablesView(generics.GenericAPIView):
+    """
+    GET /api/auth/device-tables/?device_id=BRST-XXXX[&sync=true]
+    Returns the list of tables for the device's restaurant (used by the
+    device-login screen to render a table-picker once a device_id is entered).
+
+    When ``sync=true`` is passed, the view first pulls a fresh floor/table
+    snapshot from Odoo for the device's restaurant before returning the list.
+    Odoo failures are swallowed so the login screen keeps working offline —
+    the caller just gets the DB's last known state.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from devices.models import DeviceProfile
+        from tables.models import Table
+
+        device_id = request.query_params.get('device_id', '').strip().upper()
+        if not device_id:
+            return Response(
+                {'error': 'device_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            device = (
+                DeviceProfile.objects
+                .select_related('restaurant__odoo_config')
+                .get(device_id=device_id, is_active=True)
+            )
+        except DeviceProfile.DoesNotExist:
+            return Response(
+                {'error': 'Unknown device.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        sync_requested = request.query_params.get('sync', '').lower() in ('1', 'true', 'yes')
+        sync_status = 'skipped'
+        sync_error = None
+
+        if sync_requested and device.restaurant.odoo_config_id:
+            try:
+                from odoo_integration.django_services import OdooTableSyncService
+                service = OdooTableSyncService(device.restaurant.odoo_config)
+                service.sync_tables_from_odoo(restaurant=device.restaurant)
+                sync_status = 'ok'
+            except Exception as exc:
+                logger.warning(
+                    'Odoo table sync on device-login failed for %s: %s',
+                    device_id, exc,
+                )
+                sync_status = 'failed'
+                sync_error = str(exc)
+
+        tables = (
+            Table.objects.filter(
+                restaurant_id=device.restaurant_id,
+                is_active=True,
+            )
+            .order_by('section', 'number')
+            .values('id', 'number', 'section')
+        )
+        return Response({
+            'tables': list(tables),
+            'sync': {'status': sync_status, 'error': sync_error},
+        })
 
 
 class DeviceLogoutView(generics.GenericAPIView):

@@ -4,16 +4,44 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useDevice } from '@/contexts/DeviceContext';
-import { Tablet, Hash, Lock } from 'lucide-react';
+import { deviceService } from '@/services/device.service';
+import { DeviceTableOption } from '@/types/device.types';
+import { Tablet, Hash, MapPin, Loader2 } from 'lucide-react';
 
 export default function DeviceLoginPage() {
   const { login } = useDevice();
   const router = useRouter();
 
   const [deviceId, setDeviceId] = useState('');
-  const [passcode, setPasscode] = useState('');
+  const [tableNumber, setTableNumber] = useState('');
+  const [tables, setTables] = useState<DeviceTableOption[] | null>(null);
+  const [isLoadingTables, setIsLoadingTables] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const loadedDeviceId = tables !== null ? deviceId : null;
+
+  const fetchTables = async () => {
+    const id = deviceId.trim().toUpperCase();
+    if (!id || id === loadedDeviceId) return;
+    setIsLoadingTables(true);
+    setError(null);
+    setTables(null);
+    setTableNumber('');
+    try {
+      // Ask the backend to refresh tables from Odoo for this device's
+      // restaurant before returning the list. If Odoo is unreachable the
+      // backend silently falls back to the DB snapshot.
+      const fetched = await deviceService.listTablesForDevice(id, { sync: true });
+      setTables(fetched);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 404) setError('Unknown device ID.');
+      else setError('Could not load tables for this device.');
+    } finally {
+      setIsLoadingTables(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,19 +51,19 @@ export default function DeviceLoginPage() {
       setError('Please enter a device ID.');
       return;
     }
-    if (!passcode.trim()) {
-      setError('Please enter a passcode.');
+    if (!tableNumber.trim()) {
+      setError('Please select a table.');
       return;
     }
 
     setIsLoading(true);
     try {
-      await login(deviceId.trim(), passcode.trim());
+      await login(deviceId.trim(), tableNumber.trim());
       // DeviceContext.login() sets config; redirect to tablet landing
       router.push('/tablet/device');
     } catch (err: any) {
       const msg = err?.response?.data?.error;
-      setError(msg || 'Invalid device ID or passcode. Please try again.');
+      setError(msg || 'Invalid device ID or table number. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +98,8 @@ export default function DeviceLoginPage() {
               <span>Device ID is printed on your tablet or provided by your manager</span>
             </div>
             <div className="flex items-center gap-3 text-baristas-cream/80 text-sm">
-              <Lock className="w-5 h-5 shrink-0" />
-              <span>Passcode is a 4–6 digit PIN set by the administrator</span>
+              <MapPin className="w-5 h-5 shrink-0" />
+              <span>Table number identifies which table this device is seated at</span>
             </div>
           </div>
         </div>
@@ -108,6 +136,18 @@ export default function DeviceLoginPage() {
                   onChange={(e) => {
                     setDeviceId(e.target.value.toUpperCase());
                     setError(null);
+                    // Invalidate the table list when the device id changes
+                    if (tables !== null) {
+                      setTables(null);
+                      setTableNumber('');
+                    }
+                  }}
+                  onBlur={fetchTables}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      fetchTables();
+                    }
                   }}
                   placeholder="e.g. BRST-A4X2"
                   className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-baristas-brown-dark placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-baristas-brown focus:border-transparent font-mono text-lg tracking-widest uppercase"
@@ -117,32 +157,47 @@ export default function DeviceLoginPage() {
                   disabled={isLoading}
                 />
               </div>
+              <p className="mt-1.5 text-xs text-gray-400">
+                Enter your device ID — tables for this device will load automatically.
+              </p>
             </div>
 
-            {/* Passcode — numeric keypad on mobile/tablet */}
+            {/* Table selector — populated once tables are loaded */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Passcode
+                Table
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+                  <MapPin className="h-5 w-5 text-gray-400" />
                 </div>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={passcode}
+                {isLoadingTables && (
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
+                  </div>
+                )}
+                <select
+                  value={tableNumber}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    setPasscode(val);
+                    setTableNumber(e.target.value);
                     setError(null);
                   }}
-                  placeholder="4–6 digit PIN"
-                  className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-baristas-brown-dark placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-baristas-brown focus:border-transparent font-mono text-2xl tracking-[0.5em]"
-                  disabled={isLoading}
-                />
+                  disabled={isLoading || isLoadingTables || !tables || tables.length === 0}
+                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl text-baristas-brown-dark focus:outline-none focus:ring-2 focus:ring-baristas-brown focus:border-transparent font-mono text-lg appearance-none bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="">
+                    {tables === null
+                      ? (isLoadingTables ? 'Loading tables…' : 'Enter a device ID first')
+                      : tables.length === 0
+                        ? 'No tables configured for this device'
+                        : 'Select a table…'}
+                  </option>
+                  {tables?.map((t) => (
+                    <option key={t.id} value={t.number}>
+                      Table {t.number} — {t.section}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ShoppingBag, UtensilsCrossed, Users, DollarSign, Clock, CheckCircle, ChefHat, RefreshCw } from "lucide-react";
+import { ShoppingBag, UtensilsCrossed, Users, DollarSign, Clock, CheckCircle, ChefHat, RefreshCw, Radio } from "lucide-react";
 import api from "@/lib/api";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 interface OrderStats {
   total_orders: number;
@@ -55,6 +56,12 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+const STATUS_TO_COUNT_KEY: Record<string, keyof Pick<OrderStats, "pending_count" | "preparing_count" | "ready_count">> = {
+  PENDING: "pending_count",
+  PREPARING: "preparing_count",
+  READY: "ready_count",
+};
+
 export default function AdminDashboard() {
   const { isAdmin } = useAdmin();
   const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
@@ -63,9 +70,10 @@ export default function AdminDashboard() {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const reconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const requests: Promise<any>[] = [
         api.get<OrderStats>("/api/orders/statistics/"),
@@ -84,16 +92,102 @@ export default function AdminDashboard() {
       if (results[2].status === "fulfilled") setRecentOrders(results[2].value.data.results ?? []);
       if (isAdmin && results[3]?.status === "fulfilled") setUserStats(results[3].value.data);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
       setLastRefreshed(new Date());
     }
-  };
+  }, [isAdmin]);
+
+  // Debounced authoritative re-fetch triggered after any WS activity.
+  // Optimistic local updates keep the UI responsive; this call reconciles.
+  const scheduleReconcile = useCallback(() => {
+    if (reconcileTimerRef.current) clearTimeout(reconcileTimerRef.current);
+    reconcileTimerRef.current = setTimeout(() => {
+      fetchData(true);
+    }, 1500);
+  }, [fetchData]);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60_000);
-    return () => clearInterval(interval);
-  }, [isAdmin]);
+    // Safety-net poll every 2 min in case we miss a WS event
+    const interval = setInterval(() => fetchData(true), 120_000);
+    return () => {
+      clearInterval(interval);
+      if (reconcileTimerRef.current) clearTimeout(reconcileTimerRef.current);
+    };
+  }, [fetchData]);
+
+  const handleWsMessage = useCallback((msg: any) => {
+    if (!msg?.type || !msg.order) return;
+    const o = msg.order;
+
+    if (msg.type === "order_created") {
+      setRecentOrders((prev) => {
+        if (prev.some((r) => r.id === o.id)) return prev;
+        const entry: RecentOrder = {
+          id: o.id,
+          order_number: o.order_number,
+          table_number: o.table_number,
+          status: o.status,
+          status_display: o.status, // server sends raw status; reconcile will refine
+          total_amount: o.total_amount,
+          items_count: o.items_count ?? (o.items?.length ?? 0),
+          created_at: o.created_at ?? new Date().toISOString(),
+        };
+        return [entry, ...prev].slice(0, 5);
+      });
+      setOrderStats((prev) =>
+        prev
+          ? {
+              ...prev,
+              total_orders: prev.total_orders + 1,
+              today_orders: prev.today_orders + 1,
+              pending_count: prev.pending_count + 1,
+            }
+          : prev,
+      );
+    } else if (msg.type === "order_status_changed") {
+      const oldStatus: string = msg.old_status;
+      const newStatus: string = msg.new_status;
+
+      setRecentOrders((prev) =>
+        prev.map((r) =>
+          r.id === o.id ? { ...r, status: newStatus, status_display: newStatus } : r,
+        ),
+      );
+      setOrderStats((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        const oldKey = STATUS_TO_COUNT_KEY[oldStatus];
+        const newKey = STATUS_TO_COUNT_KEY[newStatus];
+        if (oldKey) next[oldKey] = Math.max(0, next[oldKey] - 1);
+        if (newKey) next[newKey] = next[newKey] + 1;
+        if (newStatus === "SERVED") {
+          next.today_revenue = Number(next.today_revenue) + Number(o.total_amount || 0);
+        }
+        return next;
+      });
+    } else if (msg.type === "order_cancelled") {
+      setRecentOrders((prev) =>
+        prev.map((r) =>
+          r.id === o.id ? { ...r, status: "CANCELLED", status_display: "CANCELLED" } : r,
+        ),
+      );
+      setOrderStats((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        const oldKey = STATUS_TO_COUNT_KEY[o.status];
+        if (oldKey) next[oldKey] = Math.max(0, next[oldKey] - 1);
+        return next;
+      });
+    }
+
+    scheduleReconcile();
+  }, [scheduleReconcile]);
+
+  const { isConnected } = useWebSocket("/ws/orders/kitchen/", {
+    onMessage: handleWsMessage,
+    reconnect: true,
+  });
 
   const stats = [
     {
@@ -140,12 +234,27 @@ export default function AdminDashboard() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-1">Dashboard</h1>
-          <p className="text-gray-500 text-sm">
-            Last updated: {lastRefreshed.toLocaleTimeString()}
-          </p>
+          <div className="flex items-center gap-3 text-sm">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+                isConnected
+                  ? "bg-green-50 text-green-700"
+                  : "bg-gray-100 text-gray-500"
+              }`}
+              title={isConnected ? "Real-time stream connected" : "Reconnecting…"}
+            >
+              <Radio
+                className={`w-3 h-3 ${isConnected ? "animate-pulse" : ""}`}
+              />
+              {isConnected ? "Live" : "Offline"}
+            </span>
+            <span className="text-gray-500">
+              Last updated: {lastRefreshed.toLocaleTimeString()}
+            </span>
+          </div>
         </div>
         <button
-          onClick={fetchData}
+          onClick={() => fetchData(false)}
           disabled={isLoading}
           className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium disabled:opacity-50"
         >

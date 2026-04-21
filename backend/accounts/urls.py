@@ -13,6 +13,7 @@ from .views import (
     DeviceLoginView,
     DeviceLogoutView,
     DeviceStatusView,
+    DeviceTablesView,
 )
 
 app_name = 'accounts'
@@ -38,6 +39,7 @@ urlpatterns = [
     path('device-login/', DeviceLoginView.as_view(), name='device-login'),
     path('device-logout/', DeviceLogoutView.as_view(), name='device-logout'),
     path('device-status/', DeviceStatusView.as_view(), name='device-status'),
+    path('device-tables/', DeviceTablesView.as_view(), name='device-tables'),
 
     # Admin user management
     path('', include(router.urls)),

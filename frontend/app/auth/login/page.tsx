@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { z } from "zod/v4";
 import { Eye, EyeOff, Mail, Lock, Coffee } from "lucide-react";
 
@@ -13,10 +14,22 @@ const loginSchema = z.object({
 });
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, user, isLoading } = useAuth();
+  const router = useRouter();
   const [formData, setFormData] = useState({ email: "", password: "" });
+
+  // Redirect already-authenticated users away from the login page
+  useEffect(() => {
+    if (isLoading || !user) return;
+    const role = user.role;
+    if (role === 'ADMIN' || role === 'RESTAURANT_OWNER' || role === 'WAITER') {
+      router.replace('/admin');
+    } else {
+      router.replace('/menu');
+    }
+  }, [user, isLoading, router]);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,7 +56,7 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
       // login() in AuthContext handles navigation (router.push) on success
       await login(formData);
@@ -57,9 +70,12 @@ export default function LoginPage() {
 
       setErrors({ general: message });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
+
+  // Don't render the form while we're checking auth or redirecting
+  if (isLoading || user) return null;
 
   return (
     <div className="min-h-screen flex">
@@ -196,10 +212,10 @@ export default function LoginPage() {
             {/* Submit */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="w-full bg-baristas-cream text-baristas-brown-dark py-3.5 rounded-xl font-bold text-base hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg mt-2"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-baristas-brown/30 border-t-baristas-brown rounded-full animate-spin" />
                   Signing in…
